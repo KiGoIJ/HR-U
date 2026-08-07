@@ -1,5 +1,5 @@
 /**
- * RP Call Desk — Discord обзвоны + Firebase RTDB
+
  */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
 import {
