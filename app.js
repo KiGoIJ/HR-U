@@ -167,11 +167,14 @@ const state = {
   scripts: {},
   selectedAppId: null,
   selectedResult: null,
+  editingPosId: null,
   hostAuthed: sessionStorage.getItem("rp_host") === "1",
   adminAuthed: sessionStorage.getItem("rp_admin") === "1",
   hostName: localStorage.getItem("rp_host_name") || "Ведущий",
+  adminName: localStorage.getItem("rp_admin_name") || "Начальство",
   connected: false,
   filter: { q: "", status: "", positionId: "" },
+  dataTab: "positions",
   unsubscribers: [],
 };
 
@@ -499,6 +502,107 @@ async function deleteApplication(appId) {
   await writeLog("system", "application_deleted", { id: appId });
 }
 
+/* ========== Positions CRUD (Начальство) ========== */
+function slugifyPosId(title) {
+  const map = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+    и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+    с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch",
+    ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  };
+  let s = String(title || "")
+    .toLowerCase()
+    .split("")
+    .map((ch) => map[ch] ?? ch)
+    .join("");
+  s = s.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  return s || uid("pos");
+}
+
+function parseLines(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function parseTags(text) {
+  return String(text || "")
+    .split(/[,;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+async function savePosition(data, existingId = null) {
+  const title = (data.title || "").trim();
+  if (!title) throw new Error("Укажите название должности");
+
+  let id = existingId || (data.id || "").trim() || slugifyPosId(title);
+  // unique if new
+  if (!existingId && state.positions[id]) {
+    id = id + "-" + Math.random().toString(36).slice(2, 5);
+  }
+
+  const prev = existingId ? state.positions[existingId] : null;
+  const record = {
+    id,
+    title,
+    department: (data.department || "").trim() || "Подразделение",
+    level: (data.level || "руководитель").trim(),
+    status: data.status === "closed" || data.status === "draft" ? data.status : "open",
+    slots: Math.max(1, Number(data.slots) || 1),
+    tags: Array.isArray(data.tags) ? data.tags : parseTags(data.tags),
+    summary: (data.summary || "").trim(),
+    requirements: Array.isArray(data.requirements)
+      ? data.requirements
+      : parseLines(data.requirements),
+    duties: Array.isArray(data.duties) ? data.duties : parseLines(data.duties),
+    createdAt: prev?.createdAt || nowIso(),
+    updatedAt: nowIso(),
+    updatedBy: state.adminName || state.hostName || "admin",
+  };
+
+  await set(ref(db, `${paths.positions}/${id}`), record);
+  await writeLog("outbound", existingId ? "position_updated" : "position_created", {
+    id,
+    title: record.title,
+    status: record.status,
+    by: record.updatedBy,
+  });
+  return record;
+}
+
+async function setPositionStatus(id, status) {
+  const p = state.positions[id];
+  if (!p) throw new Error("Должность не найдена");
+  await update(ref(db, `${paths.positions}/${id}`), {
+    status,
+    updatedAt: nowIso(),
+    updatedBy: state.adminName || "admin",
+  });
+  await writeLog("outbound", "position_status", {
+    id,
+    title: p.title,
+    status,
+    by: state.adminName || "admin",
+  });
+}
+
+async function deletePosition(id) {
+  const p = state.positions[id];
+  if (!p) return;
+  const linked = appList().filter((a) => a.positionId === id).length;
+  if (linked > 0) {
+    // soft-close instead of hard delete if there are applications
+    await setPositionStatus(id, "closed");
+    await writeLog("system", "position_soft_closed", { id, linked });
+    return { soft: true, linked };
+  }
+  await remove(ref(db, `${paths.positions}/${id}`));
+  await writeLog("system", "position_deleted", { id, title: p.title });
+  return { soft: false };
+}
+
 /* ========== Router / Nav ========== */
 function setPage(page) {
   state.page = page;
@@ -523,6 +627,7 @@ function shell(content) {
     { id: "apply", label: "Регистрация" },
     { id: "results", label: "Результаты" },
     { id: "host", label: "Кабинет ведущего" },
+    { id: "admin", label: "Начальство" },
     { id: "data", label: "База / логи" },
   ];
 
@@ -580,6 +685,7 @@ function pageHome() {
       <a class="btn btn-primary btn-lg" href="#apply" data-nav="apply">Подать заявку</a>
       <a class="btn btn-lg" href="#results" data-nav="results">Смотреть результаты</a>
       <a class="btn btn-lg" href="#host" data-nav="host">Кабинет ведущего</a>
+      <a class="btn btn-lg" href="#admin" data-nav="admin">Начальство</a>
     </div>
   </div>
 
@@ -645,51 +751,74 @@ function pageHome() {
 }
 
 function pagePositions() {
-  const list = Object.values(state.positions);
+  const all = Object.values(state.positions);
+  const open = all.filter((p) => p.status === "open");
+  const closed = all.filter((p) => p.status !== "open");
+
+  function card(p, canApply) {
+    const n = appList().filter((a) => a.positionId === p.id).length;
+    const stLabel =
+      p.status === "open" ? "Вакантна" : p.status === "draft" ? "Черновик" : "Снята";
+    const stCls =
+      p.status === "open" ? "b-open" : p.status === "draft" ? "b-draft" : "b-closed";
+    return `
+      <article class="card pos-card">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <h3>${esc(p.title)}</h3>
+            <div class="dept">${esc(p.department)} · ${esc(p.level || "")}</div>
+          </div>
+          <span class="badge ${stCls}">${esc(stLabel)}</span>
+        </div>
+        <div class="desc">${esc(p.summary || "")}</div>
+        <div class="tags">${(p.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}
+          <span class="tag">мест: ${esc(p.slots || 1)}</span>
+          <span class="tag">заявок: ${n}</span>
+        </div>
+        <details class="mt-8">
+          <summary class="text-sm secondary" style="cursor:pointer">Требования и обязанности</summary>
+          <div class="mt-8 text-sm secondary">
+            <strong>Требования</strong>
+            <ul style="margin:6px 0 10px 16px">${(p.requirements || [])
+              .map((x) => `<li>${esc(x)}</li>`)
+              .join("") || "<li class='muted'>—</li>"}</ul>
+            <strong>Обязанности</strong>
+            <ul style="margin:6px 0 0 16px">${(p.duties || [])
+              .map((x) => `<li>${esc(x)}</li>`)
+              .join("") || "<li class='muted'>—</li>"}</ul>
+          </div>
+        </details>
+        ${
+          canApply
+            ? `<a class="btn btn-primary btn-sm mt-8" href="#apply" data-nav="apply" data-pos="${esc(
+                p.id
+              )}">Подать заявку</a>`
+            : `<div class="text-sm muted mt-8">Набор закрыт</div>`
+        }
+      </article>`;
+  }
+
   return `
-  <div class="section-title">Должности <span class="count">${list.length}</span></div>
-  <div class="alert alert-info mb-16">Замещаемые руководящие позиции для РП-отбора. Нажми «Подать заявку», чтобы встать в очередь обзвона.</div>
+  <div class="row mb-16">
+    <div class="section-title" style="margin:0">Вакантные должности <span class="count">${open.length}</span></div>
+    <div class="spacer"></div>
+    <a class="btn btn-sm" href="#admin" data-nav="admin">Управление (начальство)</a>
+  </div>
+  <div class="alert alert-info mb-16">
+    Открытые позиции для РП-отбора. Ставит и снимает вакансии <strong>начальство</strong> в кабинете админа.
+  </div>
   <div class="pos-grid">
     ${
-      list
-        .map((p) => {
-          const n = appList().filter((a) => a.positionId === p.id).length;
-          return `
-        <article class="card pos-card">
-          <div class="row" style="justify-content:space-between">
-            <div>
-              <h3>${esc(p.title)}</h3>
-              <div class="dept">${esc(p.department)} · ${esc(p.level || "")}</div>
-            </div>
-            <span class="badge ${p.status === "open" ? "b-open" : "b-closed"}">${
-              p.status === "open" ? "Открыта" : p.status
-            }</span>
-          </div>
-          <div class="desc">${esc(p.summary || "")}</div>
-          <div class="tags">${(p.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}
-            <span class="tag">заявок: ${n}</span>
-          </div>
-          <details class="mt-8">
-            <summary class="text-sm secondary" style="cursor:pointer">Требования и обязанности</summary>
-            <div class="mt-8 text-sm secondary">
-              <strong>Требования</strong>
-              <ul style="margin:6px 0 10px 16px">${(p.requirements || [])
-                .map((x) => `<li>${esc(x)}</li>`)
-                .join("")}</ul>
-              <strong>Обязанности</strong>
-              <ul style="margin:6px 0 0 16px">${(p.duties || [])
-                .map((x) => `<li>${esc(x)}</li>`)
-                .join("")}</ul>
-            </div>
-          </details>
-          <a class="btn btn-primary btn-sm mt-8" href="#apply" data-nav="apply" data-pos="${esc(
-            p.id
-          )}">Подать заявку</a>
-        </article>`;
-        })
-        .join("") || `<div class="empty card"><h4>Нет должностей</h4><p>Firebase пуст или нет прав чтения.</p></div>`
+      open.map((p) => card(p, true)).join("") ||
+      `<div class="empty card"><h4>Нет открытых вакансий</h4><p>Начальство ещё не выставило должности или все сняты.</p></div>`
     }
-  </div>`;
+  </div>
+  ${
+    closed.length
+      ? `<div class="section-title mt-16">Снятые / черновики <span class="count">${closed.length}</span></div>
+         <div class="pos-grid">${closed.map((p) => card(p, false)).join("")}</div>`
+      : ""
+  }`;
 }
 
 function pageApply() {
@@ -1097,19 +1226,222 @@ function pageHost() {
   </div>`;
 }
 
-function pageDataGate() {
+function pageAdminGate(title = "Начальство") {
   return `
-  <div class="section-title">База и логи</div>
-  <div class="card" style="max-width:420px">
+  <div class="section-title">${esc(title)}</div>
+  <div class="card" style="max-width:440px">
     <div class="card-b">
-      <p class="secondary text-sm mb-16">Просмотр всех входящих/исходящих записей. Ключ: <span class="mono">ADMIN_KEY</span> в firebase-config.js</p>
+      <p class="secondary text-sm mb-16">
+        Кабинет <strong>начальства</strong>: вакансии, база, логи.
+        Ключ: <span class="mono">ADMIN_KEY</span> в <span class="mono">firebase-config.js</span>
+        (по умолчанию <span class="mono">rp-admin-2026</span>).
+      </p>
       <div class="field mb-16">
-        <label>Ключ</label>
-        <input id="admin-key" type="password" />
+        <label>Кто входит (позывной / должность в РП)</label>
+        <input id="admin-name" value="${esc(state.adminName)}" maxlength="48" placeholder="Нач. управления" />
       </div>
-      <button type="button" class="btn btn-primary btn-block" id="admin-login">Открыть</button>
+      <div class="field mb-16">
+        <label>Ключ доступа</label>
+        <input id="admin-key" type="password" placeholder="••••••••" />
+      </div>
+      <button type="button" class="btn btn-primary btn-block" id="admin-login">Войти</button>
     </div>
   </div>`;
+}
+
+function positionFormHtml(p = null) {
+  const isEdit = !!p;
+  return `
+  <form id="pos-form" class="form-grid">
+    <input type="hidden" name="existingId" value="${esc(p?.id || "")}" />
+    <div class="field full">
+      <label>Название должности <span class="req">*</span></label>
+      <input name="title" required maxlength="120" value="${esc(p?.title || "")}" placeholder="Начальник отдела …" />
+    </div>
+    <div class="field">
+      <label>Подразделение</label>
+      <input name="department" maxlength="120" value="${esc(p?.department || "")}" placeholder="Территориальное подразделение" />
+    </div>
+    <div class="field">
+      <label>Уровень</label>
+      <select name="level">
+        ${["руководитель", "заместитель", "старший состав", "иное"]
+          .map(
+            (l) =>
+              `<option value="${esc(l)}" ${
+                (p?.level || "руководитель") === l ? "selected" : ""
+              }>${esc(l)}</option>`
+          )
+          .join("")}
+      </select>
+    </div>
+    <div class="field">
+      <label>Статус вакансии</label>
+      <select name="status">
+        <option value="open" ${!p || p.status === "open" ? "selected" : ""}>Вакантна (открыта)</option>
+        <option value="closed" ${p?.status === "closed" ? "selected" : ""}>Снята (закрыта)</option>
+        <option value="draft" ${p?.status === "draft" ? "selected" : ""}>Черновик</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Число мест</label>
+      <input name="slots" type="number" min="1" max="50" value="${esc(p?.slots ?? 1)}" />
+    </div>
+    <div class="field full">
+      <label>Краткое описание</label>
+      <textarea name="summary" placeholder="1–2 предложения для карточки">${esc(
+        p?.summary || ""
+      )}</textarea>
+    </div>
+    <div class="field full">
+      <label>Теги (через запятую)</label>
+      <input name="tags" value="${esc((p?.tags || []).join(", "))}" placeholder="руководство, ДС-обзвон" />
+    </div>
+    <div class="field full">
+      <label>Требования (каждое с новой строки)</label>
+      <textarea name="requirements" rows="5" placeholder="Опыт …">${esc(
+        (p?.requirements || []).join("\n")
+      )}</textarea>
+    </div>
+    <div class="field full">
+      <label>Обязанности (каждое с новой строки)</label>
+      <textarea name="duties" rows="5" placeholder="Руководство …">${esc(
+        (p?.duties || []).join("\n")
+      )}</textarea>
+    </div>
+    <div class="field full row">
+      <button type="submit" class="btn btn-primary">${isEdit ? "Сохранить изменения" : "Поставить вакансию"}</button>
+      ${isEdit ? `<button type="button" class="btn btn-ghost" id="pos-form-cancel">Отмена</button>` : ""}
+    </div>
+  </form>`;
+}
+
+function pageAdmin() {
+  if (!state.adminAuthed) return pageAdminGate("Начальство");
+
+  const list = Object.values(state.positions).sort((a, b) => {
+    const order = { open: 0, draft: 1, closed: 2 };
+    const d = (order[a.status] ?? 9) - (order[b.status] ?? 9);
+    if (d !== 0) return d;
+    return (a.title || "").localeCompare(b.title || "", "ru");
+  });
+  const openN = list.filter((p) => p.status === "open").length;
+  const editing = state.editingPosId ? state.positions[state.editingPosId] : null;
+
+  return `
+  <div class="row mb-16">
+    <div class="section-title" style="margin:0">Начальство · вакансии</div>
+    <div class="spacer"></div>
+    <span class="text-sm secondary">${esc(state.adminName)}</span>
+    <a class="btn btn-sm" href="#data" data-nav="data">База / логи</a>
+    <button type="button" class="btn btn-sm btn-ghost" id="admin-logout">Выйти</button>
+  </div>
+
+  <div class="grid grid-3 mb-16">
+    <div class="card stat ok"><div class="lbl">Вакантных</div><div class="val">${openN}</div><div class="hint">открыты для заявок</div></div>
+    <div class="card stat"><div class="lbl">Всего в справочнике</div><div class="val">${list.length}</div><div class="hint">включая снятые</div></div>
+    <div class="card stat accent"><div class="lbl">Заявок в базе</div><div class="val">${stats().total}</div><div class="hint">по всем должностям</div></div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-h">
+        <h3>${editing ? "Редактирование вакансии" : "Поставить новую вакансию"}</h3>
+      </div>
+      <div class="card-b">
+        <div class="alert alert-info mb-16">
+          <div>
+            <strong>Поставить</strong> — статус «Вакантна», появится в списке и в форме регистрации.<br>
+            <strong>Снять</strong> — статус «Снята», заявки больше не принимают (старые в базе сохраняются).
+          </div>
+        </div>
+        ${positionFormHtml(editing)}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <h3>Справочник должностей</h3>
+        <span class="text-sm muted">${list.length}</span>
+      </div>
+      <div class="card-b" style="padding:0">
+        ${
+          list.length
+            ? `<div class="table-wrap"><table class="data">
+          <thead>
+            <tr>
+              <th>Должность</th>
+              <th>Статус</th>
+              <th>Заявок</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list
+              .map((p) => {
+                const n = appList().filter((a) => a.positionId === p.id).length;
+                const stLabel =
+                  p.status === "open"
+                    ? "Вакантна"
+                    : p.status === "draft"
+                      ? "Черновик"
+                      : "Снята";
+                const stCls =
+                  p.status === "open"
+                    ? "b-open"
+                    : p.status === "draft"
+                      ? "b-draft"
+                      : "b-closed";
+                return `<tr>
+                  <td>
+                    <div class="fw-700">${esc(p.title)}</div>
+                    <div class="text-sm muted">${esc(p.department || "")} · мест: ${esc(
+                      p.slots || 1
+                    )}</div>
+                  </td>
+                  <td><span class="badge ${stCls}">${esc(stLabel)}</span></td>
+                  <td>${n}</td>
+                  <td>
+                    <div class="row" style="gap:6px;justify-content:flex-end">
+                      ${
+                        p.status === "open"
+                          ? `<button type="button" class="btn btn-sm" data-pos-close="${esc(
+                              p.id
+                            )}">Снять</button>`
+                          : `<button type="button" class="btn btn-sm btn-success" data-pos-open="${esc(
+                              p.id
+                            )}">Открыть</button>`
+                      }
+                      <button type="button" class="btn btn-sm" data-pos-edit="${esc(
+                        p.id
+                      )}">Изменить</button>
+                      <button type="button" class="btn btn-sm btn-ghost" data-pos-del="${esc(
+                        p.id
+                      )}" title="Удалить (если есть заявки — только снимет)">✕</button>
+                    </div>
+                  </td>
+                </tr>`;
+              })
+              .join("")}
+          </tbody>
+        </table></div>`
+            : `<div class="empty"><h4>Пока пусто</h4><p>Создайте первую вакансию слева.</p></div>`
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-warn mt-16">
+    <div>
+      Действия начальства пишутся в журнал IO (вкладка «База / логи»).
+      Ключ админа общий для управления вакансиями и просмотра базы.
+    </div>
+  </div>
+  `;
+}
+
+function pageDataGate() {
+  return pageAdminGate("База и логи");
 }
 
 function pageData() {
@@ -1122,6 +1454,7 @@ function pageData() {
   const calls = Object.values(state.calls).sort((a, b) =>
     (b.at || "").localeCompare(a.at || "")
   );
+  const tab = state.dataTab || "logs";
 
   const raw = {
     positions: state.positions,
@@ -1136,18 +1469,20 @@ function pageData() {
   <div class="row mb-16">
     <div class="section-title" style="margin:0">База / входящие · исходящие</div>
     <div class="spacer"></div>
+    <a class="btn btn-sm" href="#admin" data-nav="admin">← Вакансии</a>
     <button type="button" class="btn btn-sm" id="btn-export-json">Экспорт JSON</button>
     <button type="button" class="btn btn-sm btn-ghost" id="admin-logout">Выйти</button>
   </div>
 
   <div class="tabs" id="data-tabs">
-    <button type="button" class="tab active" data-dtab="logs">Логи IO (${logs.length})</button>
-    <button type="button" class="tab" data-dtab="apps">Заявки (${apps.length})</button>
-    <button type="button" class="tab" data-dtab="calls">Звонки (${calls.length})</button>
-    <button type="button" class="tab" data-dtab="raw">Raw JSON</button>
+    <button type="button" class="tab ${tab === "logs" ? "active" : ""}" data-dtab="logs">Логи IO (${logs.length})</button>
+    <button type="button" class="tab ${tab === "apps" ? "active" : ""}" data-dtab="apps">Заявки (${apps.length})</button>
+    <button type="button" class="tab ${tab === "calls" ? "active" : ""}" data-dtab="calls">Звонки (${calls.length})</button>
+    <button type="button" class="tab ${tab === "positions" ? "active" : ""}" data-dtab="positions">Должности (${Object.keys(state.positions).length})</button>
+    <button type="button" class="tab ${tab === "raw" ? "active" : ""}" data-dtab="raw">Raw JSON</button>
   </div>
 
-  <div id="dtab-logs" class="card card-b">
+  <div id="dtab-logs" class="card card-b" style="display:${tab === "logs" ? "" : "none"}">
     ${
       logs.length
         ? logs
@@ -1166,11 +1501,11 @@ function pageData() {
               </div>`;
             })
             .join("")
-        : `<div class="empty"><h4>Логов нет</h4><p>Появятся после заявок и обзвонов. Если пусто при активности — проверь правила RTDB.</p></div>`
+        : `<div class="empty"><h4>Логов нет</h4><p>Появятся после заявок, обзвонов и действий начальства.</p></div>`
     }
   </div>
 
-  <div id="dtab-apps" class="card" style="display:none">
+  <div id="dtab-apps" class="card" style="display:${tab === "apps" ? "" : "none"}">
     <div class="table-wrap">
       <table class="data">
         <thead><tr><th>ID</th><th>Игрок</th><th>Discord</th><th>Должность</th><th>Статус</th><th>Создано</th></tr></thead>
@@ -1192,7 +1527,7 @@ function pageData() {
     </div>
   </div>
 
-  <div id="dtab-calls" class="card" style="display:none">
+  <div id="dtab-calls" class="card" style="display:${tab === "calls" ? "" : "none"}">
     <div class="table-wrap">
       <table class="data">
         <thead><tr><th>Когда</th><th>Игрок</th><th>Результат</th><th>Ведущий</th><th>Заметка</th></tr></thead>
@@ -1215,28 +1550,17 @@ function pageData() {
     </div>
   </div>
 
-  <div id="dtab-raw" style="display:none">
-    <div class="card card-b">
-      <pre class="code" id="raw-json">${esc(JSON.stringify(raw, null, 2))}</pre>
+  <div id="dtab-positions" class="card" style="display:${tab === "positions" ? "" : "none"}">
+    <div class="card-b">
+      <a class="btn btn-primary btn-sm" href="#admin" data-nav="admin">Открыть управление вакансиями</a>
+      <pre class="code mt-12">${esc(JSON.stringify(state.positions, null, 2))}</pre>
     </div>
   </div>
 
-  <div class="card card-b mt-16">
-    <h3 style="font-size:14px;margin-bottom:10px">Правила Firebase RTDB (вставь в Realtime Database → Rules)</h3>
-    <pre class="code">${esc(`{
-  "rules": {
-    "rp": {
-      "positions": { ".read": true, ".write": true },
-      "scripts": { ".read": true, ".write": true },
-      "applications": { ".read": true, ".write": true },
-      "calls": { ".read": true, ".write": true },
-      "results": { ".read": true, ".write": true },
-      "logs": { ".read": true, ".write": true },
-      "settings": { ".read": true, ".write": true }
-    }
-  }
-}`)}</pre>
-    <p class="text-sm muted mt-8">Для учебного РП можно так. Для продакшена ограничь .write через Auth. Сейчас ключи ведущего/админа — только на клиенте (обход возможен).</p>
+  <div id="dtab-raw" style="display:${tab === "raw" ? "" : "none"}">
+    <div class="card card-b">
+      <pre class="code" id="raw-json">${esc(JSON.stringify(raw, null, 2))}</pre>
+    </div>
   </div>
   `;
 }
@@ -1260,6 +1584,9 @@ function render() {
       break;
     case "host":
       body = pageHost();
+      break;
+    case "admin":
+      body = pageAdmin();
       break;
     case "data":
       body = pageData();
@@ -1466,29 +1793,121 @@ function bindUi() {
     }
   });
 
-  // admin
+  // admin login / logout
   $("#admin-login")?.addEventListener("click", () => {
     if ($("#admin-key")?.value !== ADMIN_KEY) {
       toast("Неверный ключ", "err");
       return;
     }
+    const name = $("#admin-name")?.value?.trim() || "Начальство";
+    state.adminName = name;
+    localStorage.setItem("rp_admin_name", name);
     state.adminAuthed = true;
     sessionStorage.setItem("rp_admin", "1");
+    toast("Вход начальства выполнен", "ok");
     render();
   });
   $("#admin-logout")?.addEventListener("click", () => {
     state.adminAuthed = false;
+    state.editingPosId = null;
     sessionStorage.removeItem("rp_admin");
     render();
+  });
+
+  // position form (create / edit)
+  const posForm = $("#pos-form");
+  if (posForm) {
+    posForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(posForm);
+      const data = Object.fromEntries(fd.entries());
+      const existingId = data.existingId || null;
+      const btn = posForm.querySelector('[type="submit"]');
+      btn.disabled = true;
+      try {
+        const rec = await savePosition(data, existingId || null);
+        state.editingPosId = null;
+        toast(
+          existingId ? `Сохранено: ${rec.title}` : `Вакансия поставлена: ${rec.title}`,
+          "ok"
+        );
+      } catch (err) {
+        console.error(err);
+        toast(err.message || "Ошибка сохранения должности", "err");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+  $("#pos-form-cancel")?.addEventListener("click", () => {
+    state.editingPosId = null;
+    render();
+  });
+
+  // position table actions
+  $$("[data-pos-open]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-pos-open");
+      try {
+        await setPositionStatus(id, "open");
+        toast("Вакансия открыта", "ok");
+      } catch (e) {
+        toast(e.message || "Ошибка", "err");
+      }
+    });
+  });
+  $$("[data-pos-close]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-pos-close");
+      const p = state.positions[id];
+      if (!confirm(`Снять вакансию «${p?.title || id}» с набора?`)) return;
+      try {
+        await setPositionStatus(id, "closed");
+        toast("Вакансия снята", "ok");
+      } catch (e) {
+        toast(e.message || "Ошибка", "err");
+      }
+    });
+  });
+  $$("[data-pos-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.editingPosId = btn.getAttribute("data-pos-edit");
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+  $$("[data-pos-del]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-pos-del");
+      const p = state.positions[id];
+      if (
+        !confirm(
+          `Удалить «${p?.title || id}»?\nЕсли есть заявки — должность только снимется (closed), не сотрётся.`
+        )
+      )
+        return;
+      try {
+        const res = await deletePosition(id);
+        if (res?.soft) {
+          toast(`Есть заявки (${res.linked}) — вакансия снята, не удалена`, "warn");
+        } else {
+          toast("Должность удалена", "ok");
+        }
+        if (state.editingPosId === id) state.editingPosId = null;
+      } catch (e) {
+        toast(e.message || "Ошибка", "err");
+      }
+    });
   });
 
   // data tabs
   $$("#data-tabs .tab").forEach((tab) => {
     tab.addEventListener("click", () => {
+      const id = tab.getAttribute("data-dtab");
+      state.dataTab = id;
       $$("#data-tabs .tab").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
-      const id = tab.getAttribute("data-dtab");
-      ["logs", "apps", "calls", "raw"].forEach((k) => {
+      ["logs", "apps", "calls", "positions", "raw"].forEach((k) => {
         const el = $("#dtab-" + k);
         if (el) el.style.display = k === id ? "" : "none";
       });
