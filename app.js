@@ -1,7 +1,6 @@
 /**
  * АСУЛС · Модуль обзвонов
- * Визуальный контур как у https://kigoij.github.io/ACULS/
- * Firebase RTDB + Discord RP (без реальных номеров)
+ * АСУЛС · Модуль обзвонов
  */
 const firebaseConfig = {
   apiKey: "AIzaSyA2RxdMUGwhXBe-rpZjQQfDYG1T9UMmaV0",
@@ -20,7 +19,7 @@ const auth = firebase.auth();
 
 auth.signInAnonymously().catch((e) => {
   console.error(e);
-  toast("Ошибка Firebase Auth: " + e.message, "err");
+  toast("Ошибка входа: " + e.message, "err");
 });
 
 /* ===== Paths (отдельное дерево, не ломает employees АСУЛС) ===== */
@@ -71,10 +70,10 @@ const SEED_POSITIONS = {
     tags: ["руководство", "ДС-обзвон"],
     summary: "Организация работы отдела, контроль исполнения, взаимодействие со смежными.",
     requirements: [
-      "Опыт руководства от 3 лет (РП-бэк)",
+      "Опыт руководства от 3 лет",
       "Знание устава и субординации",
-      "Готовность к ненормированному онлайну",
-      "Адекват в войсе",
+      "Готовность к ненормированному графику",
+      "Устойчивость в переговорах",
     ],
     duties: ["Руководство отделом", "Постановка задач", "Отчётность куратору", "Работа с Л/С"],
   },
@@ -87,7 +86,7 @@ const SEED_POSITIONS = {
     slots: 3,
     tags: ["зам", "ДС-обзвон"],
     summary: "Замещение руководителя, координация направлений, контроль поручений.",
-    requirements: ["Опыт от 2 лет в структуре (РП)", "Рапорты / документация", "Стрессоустойчивость"],
+    requirements: ["Опыт от 2 лет в структуре", "Рапорты / документация", "Стрессоустойчивость"],
     duties: ["Замещение нач. отдела", "Координация направлений", "Наставничество"],
   },
   "nach-analit": {
@@ -99,7 +98,7 @@ const SEED_POSITIONS = {
     slots: 1,
     tags: ["аналитика"],
     summary: "Постановка задач аналитикам, качество докладов, методичка.",
-    requirements: ["РП-бэк в аналитике", "Умение писать отчёты", "Координация группы"],
+    requirements: ["Опыт в аналитике", "Умение писать отчёты", "Координация группы"],
     duties: ["Руководство группой", "Проверка материалов", "Взаимодействие с заказчиками"],
   },
   "zam-nach-upr": {
@@ -117,25 +116,24 @@ const SEED_POSITIONS = {
 };
 
 const SEED_SCRIPT = {
-  title: "Скрипт обзвона (Discord)",
+  title: "Скрипт обзвона",
   greeting:
-    "Привет. Я {host}, провожу обзвон на должность «{position}». Сейчас удобно 10–15 минут в войсе / ЛС?",
-  ifBusy: "Ок, напиши когда удобно — поставлю перезвон.",
+    "Здравствуйте. {host}, обзвон на должность «{position}». Удобно уделить 10–15 минут?",
+  ifBusy: "Хорошо. Напишите, когда удобно перезвонить.",
   pitch:
-    "Кратко: ищем человека на «{position}» ({department}). РП-отбор: бэк, адекват, субординация, нагрузка. Пост по звонку не гарантируем — только допуск дальше.",
+    "Рассматривается кандидатура на «{position}» ({department}). Оцениваем опыт, дисциплину, готовность к нагрузке. По итогам — допуск к следующему этапу.",
   questions: [
-    "Как давно в проекте и какой общий РП-стаж?",
-    "Был ли опыт руководства сменой / отделом / фракцией?",
+    "Какой общий стаж и опыт в проекте?",
+    "Был ли опыт руководства подразделением?",
     "Почему именно эта должность?",
-    "Как отреагируешь, если подчинённый сорвал задачу?",
-    "Готов(а) к проверкам, войсам с куратором и ненормированному онлайну?",
-    "Есть конфликты / варны / блоки, о которых важно знать?",
-    "Свободные слоты онлайна на этой неделе?",
+    "Как поступите, если подчинённый сорвал задачу?",
+    "Готовы к проверкам и ненормированному графику?",
+    "Есть ограничения, о которых важно знать заранее?",
+    "Какой у вас онлайн на этой неделе?",
   ],
-  closePass: "Фиксирую «пройден первичный обзвон». Дальше — второй этап / войс с куратором.",
-  closeFail: "Спасибо за время. По этой позиции сейчас не проходим. Оставить контакт на другие роли?",
-  oocNote:
-    "ООС: игровой обзвон. Без реальных ПДн и номеров. Только Discord / ник. Не токсим, не давим, не обещаем пост.",
+  closePass: "Фиксирую прохождение первичного обзвона. Далее — второй этап.",
+  closeFail: "Благодарю за время. По этой позиции сейчас отказываем.",
+  oocNote: "",
 };
 
 const CALL_RESULTS = [
@@ -380,7 +378,7 @@ function updateLive() {
   const el = $("#liveStatus");
   if (!el) return;
   el.className = "live-pill" + (state.connected ? "" : " off");
-  el.innerHTML = `<span class="dot"></span> ${state.connected ? "RTDB ONLINE" : "RTDB …"}`;
+  el.innerHTML = `<span class="dot"></span> ${state.connected ? "ONLINE" : "…"}`;
 }
 
 /* ===== CRUD ===== */
@@ -811,7 +809,7 @@ function renderPositions() {
   };
   $("#positionsGrid").innerHTML =
     (open.map((p) => card(p, true)).join("") ||
-      `<div class="empty-state"><i class="fas fa-briefcase"></i><h4>Нет открытых вакансий</h4><p>Начальство ещё не выставило должности</p></div>`) +
+      `<div class="empty-state"><i class="fas fa-briefcase"></i><h4>Нет открытых вакансий</h4><p>Нет открытых вакансий</p></div>`) +
     (closed.length
       ? `<div class="full" style="grid-column:1/-1;margin-top:8px;color:#718096;font-weight:700;text-transform:uppercase;font-size:0.75rem;letter-spacing:.06em;">Снятые / черновики</div>` +
         closed.map((p) => card(p, false)).join("")
@@ -1084,10 +1082,9 @@ function renderScript(selected) {
   body.innerHTML = `
     <div class="script-block"><h4>Приветствие</h4><div class="bubble">${esc(fill(script.greeting))}</div></div>
     <div class="script-block"><h4>Если занят</h4><div class="bubble alt">${esc(fill(script.ifBusy))}</div></div>
-    <div class="script-block"><h4>Питч</h4><div class="bubble">${esc(fill(script.pitch))}</div></div>
-    <div class="script-block"><h4>Закрытие — прошёл</h4><div class="bubble">${esc(fill(script.closePass))}</div></div>
-    <div class="script-block"><h4>Закрытие — отказ</h4><div class="bubble alt">${esc(fill(script.closeFail))}</div></div>
-    <div class="script-block"><h4>ООС</h4><div class="bubble warn">${esc(script.oocNote)}</div></div>
+    <div class="script-block"><h4>Суть</h4><div class="bubble">${esc(fill(script.pitch))}</div></div>
+    <div class="script-block"><h4>При интересе</h4><div class="bubble">${esc(fill(script.closePass))}</div></div>
+    <div class="script-block"><h4>При отказе</h4><div class="bubble alt">${esc(fill(script.closeFail))}</div></div>
   `;
 }
 
@@ -1248,7 +1245,7 @@ function renderProtocol() {
           </div>`;
         })
         .join("")
-    : `<div class="plog-line"><span class="plog-sys">[СИСТЕМА]</span> Журнал пуст. События появятся после заявок и обзвонов.</div>`;
+    : `<div class="plog-line"><span class="plog-sys">[СИСТЕМА]</span> Нет записей</div>`;
 
   const apps = appList();
   $("#rawAppsTable tbody").innerHTML = apps
@@ -1423,14 +1420,14 @@ function bindUi() {
       toast("Заявка отправлена", "ok");
       const ok = $("#applyOk");
       ok.style.display = "";
-      ok.innerHTML = `<div class="alert-box ok"><strong>Готово.</strong> ${esc(rec.rpName)} в очереди на «${esc(
+      ok.innerHTML = `<div class="alert-box ok">Заявка принята: ${esc(rec.rpName)} — «${esc(
         posTitle(rec.positionId)
-      )}». Discord: <span class="mono">${esc(rec.discord)}</span></div>`;
+      )}»</div>`;
       e.target.reset();
       renderApply();
     } catch (err) {
       console.error(err);
-      toast(err.message || "Ошибка. Проверьте Rules Firebase.", "err");
+      toast(err.message || "Ошибка сохранения", "err");
     } finally {
       btn.disabled = false;
     }
@@ -1507,7 +1504,7 @@ async function start() {
     bindData();
   } catch (e) {
     console.error(e);
-    toast("Не удалось подключить Firebase. Проверьте Rules.", "err");
+    toast("Нет связи с базой", "err");
   }
 
   // session restore
