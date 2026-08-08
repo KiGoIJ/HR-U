@@ -31,9 +31,9 @@
           <label for="loginPass">Пароль</label>
           <input id="loginPass" type="password" required autocomplete="current-password" />
         </div>
-        <div class="form-group">
+        <div class="form-group" id="loginMasterGroup" style="display:none;">
           <label for="loginMaster">Мастер-пароль</label>
-          <input id="loginMaster" type="password" required maxlength="6" inputmode="numeric" />
+          <input id="loginMaster" type="password" maxlength="6" inputmode="numeric" autocomplete="off" />
         </div>
         <button class="btn btn--gold btn--full" type="submit"><i class="fas fa-sign-in-alt"></i> Войти</button>
         <div id="loginError" class="login-error" style="display:none;"></div>
@@ -56,10 +56,6 @@
         <div class="form-group">
           <label>Пароль</label>
           <input id="regPass" type="password" required minlength="4" />
-        </div>
-        <div class="form-group">
-          <label>Мастер-пароль</label>
-          <input id="regMaster" type="password" required maxlength="6" />
         </div>
         <button type="submit" class="btn btn--gold"><i class="fas fa-check"></i> Создать</button>
         <div id="regError" class="login-error" style="display:none;"></div>

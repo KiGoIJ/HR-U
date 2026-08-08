@@ -797,13 +797,31 @@ function initMatrix() {
 }
 
 function bindUi() {
+  function needsMaster(role) {
+    return role === "admin" || role === "reviewer";
+  }
+
+  function updateMasterFieldVisibility() {
+    const name = ($("#loginName")?.value || "").trim().toLowerCase();
+    const pass = $("#loginPass")?.value || "";
+    const group = $("#loginMasterGroup");
+    const input = $("#loginMaster");
+    if (!group) return;
+
+    // Показываем мастер-пароль только если ФИО+пароль совпали с admin/reviewer
+    const match = state.users.find(
+      (u) => u.fullName.toLowerCase() === name && u.password === pass
+    );
+    const show = !!(match && needsMaster(match.role));
+    group.style.display = show ? "" : "none";
+    if (!show && input) input.value = "";
+  }
+
+  $("#loginName")?.addEventListener("input", updateMasterFieldVisibility);
+  $("#loginPass")?.addEventListener("input", updateMasterFieldVisibility);
+
   $("#loginForm").onsubmit = (e) => {
     e.preventDefault();
-    if ($("#loginMaster").value !== getMaster()) {
-      $("#loginError").style.display = "block";
-      $("#loginError").textContent = "Неверный мастер-пароль";
-      return;
-    }
     const name = $("#loginName").value.trim();
     const pass = $("#loginPass").value;
     const user = state.users.find(
@@ -812,7 +830,17 @@ function bindUi() {
     if (!user) {
       $("#loginError").style.display = "block";
       $("#loginError").textContent = "Неверные данные";
+      updateMasterFieldVisibility();
       return;
+    }
+    // Мастер-пароль только для ведущих ролей (кадровик / начальство)
+    if (needsMaster(user.role)) {
+      updateMasterFieldVisibility();
+      if ($("#loginMaster").value !== getMaster()) {
+        $("#loginError").style.display = "block";
+        $("#loginError").textContent = "Неверный мастер-пароль";
+        return;
+      }
     }
     $("#loginError").style.display = "none";
     enter(user);
@@ -822,11 +850,6 @@ function bindUi() {
   $("#regClose").onclick = () => ($("#regModal").style.display = "none");
   $("#regForm").onsubmit = async (e) => {
     e.preventDefault();
-    if ($("#regMaster").value !== getMaster()) {
-      $("#regError").style.display = "block";
-      $("#regError").textContent = "Неверный мастер-пароль";
-      return;
-    }
     const fullName = $("#regName").value.trim();
     const password = $("#regPass").value;
     if (state.users.some((u) => u.fullName.toLowerCase() === fullName.toLowerCase())) {
@@ -834,11 +857,14 @@ function bindUi() {
       $("#regError").textContent = "Уже существует";
       return;
     }
+    // Регистрация всегда как кандидат — без мастер-пароля
     state.users.push({ fullName, password, role: "user" });
     await R.users.set(state.users);
+    $("#regError").style.display = "none";
     $("#regModal").style.display = "none";
     toast("Аккаунт создан", "ok");
     $("#loginName").value = fullName;
+    updateMasterFieldVisibility();
   };
 
   $("#btnLogout").onclick = logout;
