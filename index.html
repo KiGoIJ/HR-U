@@ -80,6 +80,7 @@
           <button type="button" class="btn btn--gold" id="btnMy"><i class="fas fa-folder-open"></i> Мои заявки</button>
           <button type="button" class="btn btn--gold" id="btnReview" style="display:none;"><i class="fas fa-clipboard-list"></i> Рассмотрение</button>
           <button type="button" class="btn btn--gold" id="btnAdmin" style="display:none;"><i class="fas fa-briefcase"></i> Должности</button>
+          <button type="button" class="btn btn--gold" id="btnUsers" style="display:none;"><i class="fas fa-users-cog"></i> Пользователи</button>
           <button type="button" class="btn btn--secondary" id="btnLogout"><i class="fas fa-sign-out-alt"></i> Выйти</button>
         </div>
       </div>
@@ -212,6 +213,7 @@
         <div class="toolbar-row">
           <div class="view-title"><i class="fas fa-briefcase" style="color:#cfa134;"></i> Должности</div>
           <span class="spacer"></span>
+          <button type="button" class="btn btn--danger" id="btnClearPos"><i class="fas fa-trash"></i> Очистить все</button>
           <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
         </div>
         <div class="two-col">
@@ -261,6 +263,53 @@
               <table class="data" id="adminTable">
                 <thead>
                   <tr><th>Должность</th><th>Статус</th><th>Заявок</th><th></th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ADMIN USERS -->
+      <section id="view-users" class="page-hidden">
+        <div class="toolbar-row">
+          <div class="view-title"><i class="fas fa-users-cog" style="color:#cfa134;"></i> Пользователи</div>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
+        </div>
+        <div class="two-col">
+          <div class="card">
+            <h2 class="card__title" id="userFormTitle">Новый пользователь</h2>
+            <form id="userForm" class="form-grid-2">
+              <input type="hidden" id="userIndex" value="" />
+              <div class="form-group full">
+                <label>ФИО <span class="req">*</span></label>
+                <input id="userName" required maxlength="80" />
+              </div>
+              <div class="form-group">
+                <label>Пароль</label>
+                <input id="userPass" type="text" maxlength="64" autocomplete="new-password" />
+              </div>
+              <div class="form-group">
+                <label>Роль</label>
+                <select id="userRole">
+                  <option value="user">Кандидат</option>
+                  <option value="reviewer">Кадровик</option>
+                  <option value="admin">Начальство</option>
+                </select>
+              </div>
+              <div class="form-group full inline-actions">
+                <button type="submit" class="btn btn--gold"><i class="fas fa-save"></i> Сохранить</button>
+                <button type="button" class="btn btn--secondary" id="userCancel" style="display:none;">Отмена</button>
+              </div>
+            </form>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div class="data-table-wrap">
+              <table class="data" id="usersTable">
+                <thead>
+                  <tr><th>ФИО</th><th>Роль</th><th>Пароль</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
               </table>

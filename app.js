@@ -37,57 +37,6 @@ function getMaster() {
   }
 }
 
-const SEED_POS = {
-  "nach-otd": {
-    id: "nach-otd",
-    title: "Начальник отдела",
-    department: "Территориальное подразделение",
-    status: "open",
-    slots: 2,
-    summary: "Организация работы отдела, контроль исполнения, взаимодействие со смежными подразделениями.",
-    requirements: [
-      "Опыт руководства от 3 лет",
-      "Знание устава и субординации",
-      "Готовность к ненормированному графику",
-    ],
-    duties: ["Руководство отделом", "Постановка задач", "Отчётность", "Работа с личным составом"],
-    order: 10,
-  },
-  "zam-nach-otd": {
-    id: "zam-nach-otd",
-    title: "Заместитель начальника отдела",
-    department: "Территориальное подразделение",
-    status: "open",
-    slots: 3,
-    summary: "Замещение руководителя, координация направлений, контроль поручений.",
-    requirements: ["Опыт от 2 лет", "Документооборот", "Стрессоустойчивость"],
-    duties: ["Замещение начальника", "Координация", "Наставничество"],
-    order: 20,
-  },
-  "nach-analit": {
-    id: "nach-analit",
-    title: "Начальник аналитического направления",
-    department: "Аналитический блок",
-    status: "open",
-    slots: 1,
-    summary: "Постановка задач аналитикам, контроль качества материалов.",
-    requirements: ["Опыт аналитики", "Подготовка докладов", "Координация группы"],
-    duties: ["Руководство группой", "Проверка материалов", "Методическая работа"],
-    order: 30,
-  },
-  "zam-nach-upr": {
-    id: "zam-nach-upr",
-    title: "Заместитель начальника управления",
-    department: "Управленческий аппарат",
-    status: "open",
-    slots: 1,
-    summary: "Координация блоков, контроль поручений, участие в организационных решениях.",
-    requirements: ["Существенный руководящий опыт", "Опыт замещения первого лица"],
-    duties: ["Координация блоков", "Контроль поручений", "Совещания"],
-    order: 40,
-  },
-};
-
 const STATUS = {
   new: { label: "Подана", cls: "b-new" },
   review: { label: "Рассмотрение", cls: "b-calling" },
@@ -108,6 +57,7 @@ const state = {
   revFilter: "active",
   connected: false,
   editingPosId: null,
+  editingUserIndex: null,
 };
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -193,20 +143,54 @@ function appsForPos(id) {
 }
 
 async function ensureSeed() {
-  const [p, u] = await Promise.all([R.positions.once("value"), R.users.once("value")]);
-  if (!p.exists()) {
-    const o = {};
-    Object.values(SEED_POS).forEach((x) => {
-      o[x.id] = { ...x, updatedAt: nowIso() };
-    });
-    await R.positions.set(o);
-  }
+  const u = await R.users.once("value");
+  // Должности не сидируем — только учётки входа, если база пустая
   if (!u.exists()) {
     await R.users.set([
       { fullName: "Администратор", password: "admin", role: "admin" },
       { fullName: "Кадровик", password: "kadry", role: "reviewer" },
     ]);
   }
+}
+
+async function saveUser(data, index = null) {
+  const fullName = (data.fullName || "").trim();
+  const password = (data.password || "").trim();
+  const role = ["admin", "reviewer", "user"].includes(data.role) ? data.role : "user";
+  if (!fullName) throw new Error("Укажите ФИО");
+  if (index == null && !password) throw new Error("Укажите пароль");
+
+  const list = state.users.slice();
+  const dup = list.findIndex(
+    (u, i) => u.fullName.toLowerCase() === fullName.toLowerCase() && i !== index
+  );
+  if (dup >= 0) throw new Error("Такой пользователь уже есть");
+
+  if (index == null) {
+    list.push({ fullName, password, role });
+  } else {
+    if (!list[index]) throw new Error("Пользователь не найден");
+    list[index] = {
+      fullName,
+      password: password || list[index].password,
+      role,
+    };
+  }
+  await R.users.set(list);
+  state.users = list;
+  return list;
+}
+
+async function deleteUser(index) {
+  const list = state.users.slice();
+  const u = list[index];
+  if (!u) throw new Error("Не найден");
+  if (u.fullName === state.user?.fullName) throw new Error("Нельзя удалить себя");
+  const admins = list.filter((x) => x.role === "admin");
+  if (u.role === "admin" && admins.length <= 1) throw new Error("Нужен хотя бы один администратор");
+  list.splice(index, 1);
+  await R.users.set(list);
+  state.users = list;
 }
 
 function bind() {
@@ -339,7 +323,7 @@ async function deletePos(id) {
 /* ===== Views ===== */
 function show(view) {
   state.view = view;
-  ["home", "my", "review", "admin"].forEach((v) => {
+  ["home", "my", "review", "admin", "users"].forEach((v) => {
     const el = $("#view-" + v);
     if (el) el.classList.toggle("page-hidden", v !== view);
   });
@@ -359,6 +343,7 @@ function render() {
   if (state.view === "my") renderMy();
   if (state.view === "review") renderReview();
   if (state.view === "admin") renderAdmin();
+  if (state.view === "users") renderUsers();
   renderSideRecent();
 }
 
@@ -691,6 +676,77 @@ function resetPos() {
   $("#posCancel").style.display = "none";
 }
 
+function renderUsers() {
+  if (!isAdmin()) {
+    $("#usersTable tbody").innerHTML = `<tr><td colspan="4">Нет доступа</td></tr>`;
+    return;
+  }
+  const tb = $("#usersTable tbody");
+  tb.innerHTML = state.users.length
+    ? state.users
+        .map((u, i) => {
+          const self = u.fullName === state.user?.fullName;
+          return `<tr>
+          <td>
+            <div class="fw-700">${esc(u.fullName)}${self ? ' <span class="text-sm muted">(вы)</span>' : ""}</div>
+          </td>
+          <td><span class="role-badge ${esc(u.role)}">${esc(roleLabel(u.role))}</span></td>
+          <td class="text-sm muted mono">${esc(u.password ? "••••" : "—")}</td>
+          <td>
+            <div class="table-actions">
+              <button type="button" class="btn btn--primary" style="padding:6px 10px;font-size:0.78rem" data-uedit="${i}">Изменить</button>
+              <button type="button" class="btn btn--danger" style="padding:6px 10px;font-size:0.78rem" data-udel="${i}" ${
+                self ? "disabled" : ""
+              }>✕</button>
+            </div>
+          </td>
+        </tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="4"><div class="empty-state"><h4>Нет пользователей</h4></div></td></tr>`;
+
+  $$("[data-uedit]").forEach((b) =>
+    b.addEventListener("click", () => fillUser(Number(b.getAttribute("data-uedit"))))
+  );
+  $$("[data-udel]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const i = Number(b.getAttribute("data-udel"));
+      const u = state.users[i];
+      if (!u || !confirm("Удалить «" + u.fullName + "»?")) return;
+      try {
+        await deleteUser(i);
+        toast("Удалено", "ok");
+        resetUserForm();
+        renderUsers();
+      } catch (e) {
+        toast(e.message || "Ошибка", "err");
+      }
+    })
+  );
+}
+
+function fillUser(index) {
+  const u = state.users[index];
+  if (!u) return;
+  state.editingUserIndex = index;
+  $("#userFormTitle").textContent = "Редактирование";
+  $("#userIndex").value = String(index);
+  $("#userName").value = u.fullName || "";
+  $("#userPass").value = "";
+  $("#userPass").placeholder = "Оставьте пустым, чтобы не менять";
+  $("#userRole").value = u.role || "user";
+  $("#userCancel").style.display = "";
+}
+
+function resetUserForm() {
+  state.editingUserIndex = null;
+  $("#userFormTitle").textContent = "Новый пользователь";
+  $("#userForm").reset();
+  $("#userIndex").value = "";
+  $("#userPass").placeholder = "";
+  $("#userCancel").style.display = "none";
+}
+
 /* ===== Auth / UI ===== */
 function enter(user) {
   state.user = user;
@@ -700,6 +756,7 @@ function enter(user) {
   $("#userDisplay").textContent = `${user.fullName} · ${roleLabel(user.role)}`;
   $("#btnReview").style.display = isReviewer() ? "" : "none";
   $("#btnAdmin").style.display = isAdmin() ? "" : "none";
+  $("#btnUsers").style.display = isAdmin() ? "" : "none";
   show("home");
 }
 function logout() {
@@ -790,6 +847,7 @@ function bindUi() {
   $("#btnMy").onclick = () => show("my");
   $("#btnReview").onclick = () => show("review");
   $("#btnAdmin").onclick = () => show("admin");
+  $("#btnUsers").onclick = () => show("users");
 
   $("#applyCancel").onclick = () => {
     $("#applyCard").style.display = "none";
@@ -851,6 +909,43 @@ function bindUi() {
     }
   };
   $("#posCancel").onclick = resetPos;
+  $("#btnClearPos").onclick = async () => {
+    if (!isAdmin()) return;
+    if (!confirm("Удалить ВСЕ должности из базы?")) return;
+    try {
+      await R.positions.set({});
+      state.positions = {};
+      state.selectedPosId = null;
+      resetPos();
+      toast("Должности очищены", "ok");
+      render();
+    } catch (e) {
+      toast(e.message || "Ошибка", "err");
+    }
+  };
+
+  $("#userForm").onsubmit = async (e) => {
+    e.preventDefault();
+    if (!isAdmin()) return;
+    const idxRaw = $("#userIndex").value;
+    const index = idxRaw === "" ? null : Number(idxRaw);
+    try {
+      await saveUser(
+        {
+          fullName: $("#userName").value,
+          password: $("#userPass").value,
+          role: $("#userRole").value,
+        },
+        index
+      );
+      toast("Сохранено", "ok");
+      resetUserForm();
+      renderUsers();
+    } catch (err) {
+      toast(err.message || "Ошибка", "err");
+    }
+  };
+  $("#userCancel").onclick = resetUserForm;
 }
 
 async function start() {
