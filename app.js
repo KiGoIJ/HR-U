@@ -1,6 +1,5 @@
 /**
- * АСУЛС · Модуль обзвонов
- * АСУЛС · Модуль обзвонов
+ * АСУЛС · Заявки на должности
  */
 const firebaseConfig = {
   apiKey: "AIzaSyA2RxdMUGwhXBe-rpZjQQfDYG1T9UMmaV0",
@@ -14,170 +13,103 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
-const auth = firebase.auth();
+const db = firebase.database();
+firebase.auth().signInAnonymously().catch(console.error);
 
-auth.signInAnonymously().catch((e) => {
-  console.error(e);
-  toast("Ошибка входа: " + e.message, "err");
-});
-
-/* ===== Paths (отдельное дерево, не ломает employees АСУЛС) ===== */
-const P = {
-  users: "calldesk/users",
-  positions: "calldesk/positions",
-  applications: "calldesk/applications",
-  calls: "calldesk/calls",
-  results: "calldesk/results",
-  logs: "calldesk/logs",
-  scripts: "calldesk/scripts",
+const R = {
+  users: db.ref("apps/users"),
+  positions: db.ref("apps/positions"),
+  applications: db.ref("apps/applications"),
 };
 
-const usersRef = database.ref(P.users);
-const positionsRef = database.ref(P.positions);
-const applicationsRef = database.ref(P.applications);
-const callsRef = database.ref(P.calls);
-const resultsRef = database.ref(P.results);
-const logsRef = database.ref(P.logs);
-const scriptsRef = database.ref(P.scripts);
-
-/* ===== Master password (как в АСУЛС) ===== */
-const MASTER_KEY = "asuls_calls_master_password";
+const MASTER_KEY = "asuls_apps_master";
 const DEFAULT_MASTER = "123456";
-
-function getMasterPassword() {
-  let stored = localStorage.getItem(MASTER_KEY);
-  if (!stored) {
+function getMaster() {
+  let s = localStorage.getItem(MASTER_KEY);
+  if (!s) {
     localStorage.setItem(MASTER_KEY, btoa(DEFAULT_MASTER));
     return DEFAULT_MASTER;
   }
   try {
-    return atob(stored);
+    return atob(s);
   } catch {
     return DEFAULT_MASTER;
   }
 }
 
-/* ===== Seed ===== */
-const SEED_POSITIONS = {
+const SEED_POS = {
   "nach-otd": {
     id: "nach-otd",
     title: "Начальник отдела",
     department: "Территориальное подразделение",
-    level: "руководитель",
     status: "open",
     slots: 2,
-    tags: ["руководство", "ДС-обзвон"],
-    summary: "Организация работы отдела, контроль исполнения, взаимодействие со смежными.",
+    summary: "Организация работы отдела, контроль исполнения, взаимодействие со смежными подразделениями.",
     requirements: [
       "Опыт руководства от 3 лет",
       "Знание устава и субординации",
       "Готовность к ненормированному графику",
-      "Устойчивость в переговорах",
     ],
-    duties: ["Руководство отделом", "Постановка задач", "Отчётность куратору", "Работа с Л/С"],
+    duties: ["Руководство отделом", "Постановка задач", "Отчётность", "Работа с личным составом"],
+    order: 10,
   },
   "zam-nach-otd": {
     id: "zam-nach-otd",
     title: "Заместитель начальника отдела",
     department: "Территориальное подразделение",
-    level: "заместитель",
     status: "open",
     slots: 3,
-    tags: ["зам", "ДС-обзвон"],
     summary: "Замещение руководителя, координация направлений, контроль поручений.",
-    requirements: ["Опыт от 2 лет в структуре", "Рапорты / документация", "Стрессоустойчивость"],
-    duties: ["Замещение нач. отдела", "Координация направлений", "Наставничество"],
+    requirements: ["Опыт от 2 лет", "Документооборот", "Стрессоустойчивость"],
+    duties: ["Замещение начальника", "Координация", "Наставничество"],
+    order: 20,
   },
   "nach-analit": {
     id: "nach-analit",
     title: "Начальник аналитического направления",
     department: "Аналитический блок",
-    level: "руководитель",
     status: "open",
     slots: 1,
-    tags: ["аналитика"],
-    summary: "Постановка задач аналитикам, качество докладов, методичка.",
-    requirements: ["Опыт в аналитике", "Умение писать отчёты", "Координация группы"],
-    duties: ["Руководство группой", "Проверка материалов", "Взаимодействие с заказчиками"],
+    summary: "Постановка задач аналитикам, контроль качества материалов.",
+    requirements: ["Опыт аналитики", "Подготовка докладов", "Координация группы"],
+    duties: ["Руководство группой", "Проверка материалов", "Методическая работа"],
+    order: 30,
   },
   "zam-nach-upr": {
     id: "zam-nach-upr",
     title: "Заместитель начальника управления",
     department: "Управленческий аппарат",
-    level: "заместитель",
     status: "open",
     slots: 1,
-    tags: ["управление", "старший состав"],
-    summary: "Координация блоков, контроль поручений, орг. решения.",
-    requirements: ["Существенный руководящий бэк", "Опыт замещения первого лица"],
+    summary: "Координация блоков, контроль поручений, участие в организационных решениях.",
+    requirements: ["Существенный руководящий опыт", "Опыт замещения первого лица"],
     duties: ["Координация блоков", "Контроль поручений", "Совещания"],
+    order: 40,
   },
 };
 
-const SEED_SCRIPT = {
-  title: "Скрипт обзвона",
-  greeting:
-    "Здравствуйте. {host}, обзвон на должность «{position}». Удобно уделить 10–15 минут?",
-  ifBusy: "Хорошо. Напишите, когда удобно перезвонить.",
-  pitch:
-    "Рассматривается кандидатура на «{position}» ({department}). Оцениваем опыт, дисциплину, готовность к нагрузке. По итогам — допуск к следующему этапу.",
-  questions: [
-    "Какой общий стаж и опыт в проекте?",
-    "Был ли опыт руководства подразделением?",
-    "Почему именно эта должность?",
-    "Как поступите, если подчинённый сорвал задачу?",
-    "Готовы к проверкам и ненормированному графику?",
-    "Есть ограничения, о которых важно знать заранее?",
-    "Какой у вас онлайн на этой неделе?",
-  ],
-  closePass: "Фиксирую прохождение первичного обзвона. Далее — второй этап.",
-  closeFail: "Благодарю за время. По этой позиции сейчас отказываем.",
-  oocNote: "",
+const STATUS = {
+  new: { label: "Подана", cls: "b-new" },
+  review: { label: "Рассмотрение", cls: "b-calling" },
+  interview: { label: "Собеседование", cls: "b-interview" },
+  accepted: { label: "Принята", cls: "b-pass" },
+  rejected: { label: "Отказ", cls: "b-fail" },
+  withdrawn: { label: "Отозвана", cls: "b-noanswer" },
 };
 
-const CALL_RESULTS = [
-  { id: "noanswer", label: "Не ответил / оффлайн", status: "noanswer" },
-  { id: "callback", label: "Перезвонить позже", status: "callback" },
-  { id: "pass", label: "Прошёл обзвон", status: "pass" },
-  { id: "fail", label: "Не прошёл", status: "fail" },
-  { id: "interview", label: "На второй этап", status: "interview" },
-  { id: "reject_self", label: "Сам отказался", status: "fail" },
-];
-
-const STATUS_META = {
-  new: { label: "Новая заявка", cls: "b-new" },
-  queued: { label: "В очереди", cls: "b-queued" },
-  calling: { label: "На линии", cls: "b-calling" },
-  noanswer: { label: "Недозвон", cls: "b-noanswer" },
-  callback: { label: "Перезвонить", cls: "b-callback" },
-  pass: { label: "Прошёл", cls: "b-pass" },
-  fail: { label: "Не прошёл", cls: "b-fail" },
-  interview: { label: "2-й этап", cls: "b-interview" },
-};
-
-/* ===== State ===== */
 const state = {
-  currentUser: null,
+  user: null,
   users: [],
   positions: {},
   applications: {},
-  calls: {},
-  results: {},
-  logs: {},
-  scripts: { default: SEED_SCRIPT },
-  connected: false,
-  tab: "home",
+  view: "home",
+  selectedPosId: null,
   selectedAppId: null,
-  selectedResult: null,
+  revFilter: "active",
+  connected: false,
   editingPosId: null,
-  hostFilterStatus: "active",
-  hostFilterPos: "",
-  resStatus: "",
-  resQ: "",
 };
 
-/* ===== Utils ===== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = (s) =>
@@ -187,13 +119,13 @@ const esc = (s) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-function uid(prefix = "id") {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+function uid(p = "id") {
+  return p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 function nowIso() {
   return new Date().toISOString();
 }
-function fmtDate(iso) {
+function fmt(iso) {
   if (!iso) return "—";
   try {
     return new Date(iso).toLocaleString("ru-RU", {
@@ -208,31 +140,33 @@ function fmtDate(iso) {
   }
 }
 function toast(msg, type = "") {
-  const host = $("#toast-host");
-  if (!host) return;
+  const h = $("#toast-host");
   const el = document.createElement("div");
   el.className = "toast " + type;
   el.textContent = msg;
-  host.appendChild(el);
+  h.appendChild(el);
   setTimeout(() => {
     el.style.opacity = "0";
     el.style.transition = "opacity .2s";
     setTimeout(() => el.remove(), 200);
-  }, 3200);
+  }, 2800);
 }
-function badge(status) {
-  const m = STATUS_META[status] || { label: status || "—", cls: "b-draft" };
+function badge(st) {
+  const m = STATUS[st] || { label: st || "—", cls: "b-draft" };
   return `<span class="badge ${m.cls}">${esc(m.label)}</span>`;
+}
+function isAdmin() {
+  return state.user?.role === "admin";
+}
+function isReviewer() {
+  const r = state.user?.role;
+  return r === "admin" || r === "reviewer";
+}
+function roleLabel(r) {
+  return { admin: "Начальство", reviewer: "Кадровик", user: "Кандидат" }[r] || "Кандидат";
 }
 function posTitle(id) {
   return state.positions[id]?.title || id || "—";
-}
-function isAdmin() {
-  return state.currentUser?.role === "admin";
-}
-function isHost() {
-  const r = state.currentUser?.role;
-  return r === "admin" || r === "host";
 }
 function parseLines(t) {
   return String(t || "")
@@ -240,1288 +174,707 @@ function parseLines(t) {
     .map((x) => x.trim())
     .filter(Boolean);
 }
-function parseTags(t) {
-  return String(t || "")
-    .split(/[,;]+/)
-    .map((x) => x.trim())
-    .filter(Boolean);
+function openPositions() {
+  return Object.values(state.positions)
+    .filter((p) => p.status === "open")
+    .sort((a, b) => (a.order || 0) - (b.order || 0) || (a.title || "").localeCompare(b.title || "", "ru"));
 }
-function slugify(title) {
-  const map = {
-    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
-    и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
-    с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch",
-    ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
-  };
-  let s = String(title || "")
-    .toLowerCase()
-    .split("")
-    .map((ch) => map[ch] ?? ch)
-    .join("")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
-  return s || uid("pos");
-}
-
-function appList() {
+function allApps() {
   return Object.values(state.applications).sort((a, b) =>
     (b.createdAt || "").localeCompare(a.createdAt || "")
   );
 }
-function stats() {
-  const apps = appList();
-  const by = (s) => apps.filter((a) => a.status === s).length;
-  return {
-    total: apps.length,
-    queue: by("new") + by("queued") + by("calling"),
-    callback: by("callback") + by("noanswer"),
-    pass: by("pass"),
-    fail: by("fail"),
-    interview: by("interview"),
-    calls: Object.keys(state.calls).length,
-    openPos: Object.values(state.positions).filter((p) => p.status === "open").length,
-  };
+function myApps() {
+  const name = state.user?.fullName;
+  return allApps().filter((a) => a.owner === name);
+}
+function appsForPos(id) {
+  return allApps().filter((a) => a.positionId === id);
 }
 
-/* ===== Logging ===== */
-async function writeLog(direction, kind, payload) {
-  try {
-    const id = uid("log");
-    await logsRef.child(id).set({
-      id,
-      direction,
-      kind,
-      payload: payload || {},
-      at: nowIso(),
-      user: state.currentUser?.fullName || null,
-    });
-  } catch (e) {
-    console.warn("log", e);
-  }
-}
-
-function addLogEntry(message) {
-  writeLog("system", "ui", { message });
-}
-
-/* ===== Seed / ensure ===== */
 async function ensureSeed() {
-  const [posSnap, scSnap, usSnap] = await Promise.all([
-    positionsRef.once("value"),
-    scriptsRef.once("value"),
-    usersRef.once("value"),
-  ]);
-  if (!posSnap.exists()) {
-    const stamped = {};
-    Object.values(SEED_POSITIONS).forEach((p) => {
-      stamped[p.id] = { ...p, updatedAt: nowIso() };
+  const [p, u] = await Promise.all([R.positions.once("value"), R.users.once("value")]);
+  if (!p.exists()) {
+    const o = {};
+    Object.values(SEED_POS).forEach((x) => {
+      o[x.id] = { ...x, updatedAt: nowIso() };
     });
-    await positionsRef.set(stamped);
-    await writeLog("system", "seed_positions", { count: Object.keys(stamped).length });
+    await R.positions.set(o);
   }
-  if (!scSnap.exists()) {
-    await scriptsRef.set({ default: SEED_SCRIPT });
-  }
-  if (!usSnap.exists()) {
-    await usersRef.set([
+  if (!u.exists()) {
+    await R.users.set([
       { fullName: "Администратор", password: "admin", role: "admin" },
-      { fullName: "Ведущий", password: "host", role: "host" },
+      { fullName: "Кадровик", password: "kadry", role: "reviewer" },
     ]);
-    await writeLog("system", "seed_users", {});
   }
 }
 
-/* ===== Bind RTDB ===== */
-function bindData() {
-  const bind = (ref, key, cb) => {
-    ref.on(
-      "value",
-      (snap) => {
-        let val = snap.val();
-        if (key === "users") {
-          state.users = val
-            ? Array.isArray(val)
-              ? val
-              : Object.values(val)
-            : [];
-        } else {
-          state[key] = val || {};
-        }
-        state.connected = true;
-        updateLive();
-        if (state.currentUser) renderAll();
-        if (cb) cb();
-      },
-      (err) => {
-        console.error(err);
-        state.connected = false;
-        updateLive();
-        toast("RTDB: " + err.message, "err");
-      }
-    );
-  };
-  bind(usersRef, "users");
-  bind(positionsRef, "positions");
-  bind(applicationsRef, "applications");
-  bind(callsRef, "calls");
-  bind(resultsRef, "results");
-  bind(scriptsRef, "scripts");
-  logsRef.limitToLast(100).on("value", (snap) => {
-    state.logs = snap.val() || {};
-    if (state.currentUser && state.tab === "protocol") renderProtocol();
-    if (state.currentUser && state.tab === "home") renderHome();
-  });
+function bind() {
+  R.users.on(
+    "value",
+    (s) => {
+      const v = s.val();
+      state.users = v ? (Array.isArray(v) ? v : Object.values(v)) : [];
+      state.connected = true;
+      live();
+      if (state.user) render();
+    },
+    onErr
+  );
+  R.positions.on(
+    "value",
+    (s) => {
+      state.positions = s.val() || {};
+      state.connected = true;
+      live();
+      if (state.user) render();
+    },
+    onErr
+  );
+  R.applications.on(
+    "value",
+    (s) => {
+      state.applications = s.val() || {};
+      state.connected = true;
+      live();
+      if (state.user) render();
+    },
+    onErr
+  );
 }
-
-function updateLive() {
+function onErr(e) {
+  console.error(e);
+  state.connected = false;
+  live();
+  toast("Нет связи с базой", "err");
+}
+function live() {
   const el = $("#liveStatus");
   if (!el) return;
   el.className = "live-pill" + (state.connected ? "" : " off");
   el.innerHTML = `<span class="dot"></span> ${state.connected ? "ONLINE" : "…"}`;
 }
 
-/* ===== CRUD ===== */
-async function submitApplication(data) {
+async function submitApp(data) {
   const id = uid("app");
-  const record = {
+  const rec = {
     id,
-    rpName: data.rpName.trim(),
-    discord: data.discord.trim(),
-    staticId: (data.staticId || "").trim(),
-    city: (data.city || "").trim(),
     positionId: data.positionId,
-    experience: (data.experience || "").trim(),
-    timezone: (data.timezone || "").trim(),
-    ageRp: (data.ageRp || "").trim(),
-    notes: (data.notes || "").trim(),
-    consent: true,
+    positionTitle: posTitle(data.positionId),
+    owner: state.user.fullName,
+    name: data.name.trim(),
+    staticId: data.staticId.trim(),
+    discord: data.discord.trim(),
+    age: (data.age || "").trim(),
+    online: (data.online || "").trim(),
+    currentRole: (data.currentRole || "").trim(),
+    experience: data.experience.trim(),
+    motivation: data.motivation.trim(),
+    extra: (data.extra || "").trim(),
     status: "new",
+    note: "",
     createdAt: nowIso(),
     updatedAt: nowIso(),
-    answers: {},
-    lastCallAt: null,
-    callbackAt: null,
-    resultSummary: null,
-    submittedBy: state.currentUser?.fullName || null,
+    reviewer: null,
   };
-  await applicationsRef.child(id).set(record);
-  await writeLog("inbound", "application", {
-    id,
-    rpName: record.rpName,
-    discord: record.discord,
-    positionId: record.positionId,
-  });
-  await resultsRef.child(id).set({
-    id,
-    rpName: record.rpName,
-    discordTag: record.discord,
-    positionId: record.positionId,
-    positionTitle: posTitle(record.positionId) || record.positionId,
-    status: "new",
-    statusLabel: STATUS_META.new.label,
-    updatedAt: nowIso(),
-    publicNote: "Заявка принята, ожидает обзвона",
-  });
-  await writeLog("outbound", "result_created", { id, status: "new" });
-  return record;
+  await R.applications.child(id).set(rec);
+  return rec;
 }
 
-async function saveCallOutcome(appId, payload) {
-  const appRec = state.applications[appId];
-  if (!appRec) throw new Error("Заявка не найдена");
-  const resultDef = CALL_RESULTS.find((r) => r.id === payload.resultId);
-  if (!resultDef) throw new Error("Выберите результат");
-
-  const callId = uid("call");
-  const at = nowIso();
-  const host = state.currentUser?.fullName || "Ведущий";
-  const call = {
-    id: callId,
-    applicationId: appId,
-    rpName: appRec.rpName,
-    discord: appRec.discord,
-    positionId: appRec.positionId,
-    host,
-    resultId: payload.resultId,
-    resultLabel: resultDef.label,
-    status: resultDef.status,
-    note: payload.note || "",
-    answers: payload.answers || {},
-    callbackAt: payload.callbackAt || null,
-    at,
-  };
-  await callsRef.child(callId).set(call);
-  await writeLog("outbound", "call_saved", {
-    callId,
-    applicationId: appId,
-    resultId: payload.resultId,
-    host,
-  });
-
-  const appUpdate = {
-    status: resultDef.status,
-    updatedAt: at,
-    lastCallAt: at,
-    resultSummary: resultDef.label,
-    answers: payload.answers || {},
-    lastNote: payload.note || "",
-    lastHost: host,
-  };
-  if (payload.callbackAt) appUpdate.callbackAt = payload.callbackAt;
-  await applicationsRef.child(appId).update(appUpdate);
-
-  const publicNote =
-    payload.publicNote ||
-    ({
-      pass: "Прошёл первичный обзвон",
-      fail: "Не прошёл обзвон",
-      interview: "Приглашён на второй этап",
-      callback: "Назначен перезвон",
-      noanswer: "Не удалось связаться",
-    }[resultDef.status] || resultDef.label);
-
-  await resultsRef.child(appId).set({
-    id: appId,
-    rpName: appRec.rpName,
-    discordTag: appRec.discord,
-    positionId: appRec.positionId,
-    positionTitle: posTitle(appRec.positionId),
-    status: resultDef.status,
-    statusLabel: STATUS_META[resultDef.status]?.label || resultDef.label,
-    updatedAt: at,
-    publicNote,
-    host,
-    callId,
-  });
-  await writeLog("outbound", "result_published", {
-    id: appId,
-    status: resultDef.status,
-    publicNote,
-  });
-  return call;
-}
-
-async function setAppStatus(id, status) {
-  await applicationsRef.child(id).update({ status, updatedAt: nowIso() });
-  await resultsRef.child(id).update({
+async function setAppStatus(id, status, note) {
+  const patch = {
     status,
-    statusLabel: STATUS_META[status]?.label || status,
+    updatedAt: nowIso(),
+    reviewer: state.user.fullName,
+  };
+  if (note != null) patch.note = note;
+  await R.applications.child(id).update(patch);
+}
+
+async function withdrawApp(id) {
+  const a = state.applications[id];
+  if (!a || a.owner !== state.user.fullName) throw new Error("Нет доступа");
+  if (!["new", "review"].includes(a.status)) throw new Error("Нельзя отозвать");
+  await R.applications.child(id).update({
+    status: "withdrawn",
     updatedAt: nowIso(),
   });
-  await writeLog("outbound", "status_set", { id, status });
 }
 
-async function deleteApplication(id) {
-  await applicationsRef.child(id).remove();
-  await resultsRef.child(id).remove();
-  await writeLog("system", "application_deleted", { id });
-}
-
-async function savePosition(data, existingId) {
-  const title = (data.title || "").trim();
+async function savePos(data, existingId) {
+  const title = data.title.trim();
   if (!title) throw new Error("Укажите название");
-  let id = existingId || slugify(title);
+  let id = existingId || title.toLowerCase().replace(/[^a-zа-я0-9]+/gi, "-").slice(0, 40) || uid("pos");
   if (!existingId && state.positions[id]) id = id + "-" + Math.random().toString(36).slice(2, 5);
   const prev = existingId ? state.positions[existingId] : null;
-  const record = {
+  const rec = {
     id,
     title,
     department: (data.department || "").trim() || "Подразделение",
-    level: (data.level || "руководитель").trim(),
-    status: ["open", "closed", "draft"].includes(data.status) ? data.status : "open",
+    status: data.status === "closed" ? "closed" : "open",
     slots: Math.max(1, Number(data.slots) || 1),
-    tags: parseTags(data.tags),
     summary: (data.summary || "").trim(),
     requirements: parseLines(data.requirements),
     duties: parseLines(data.duties),
-    createdAt: prev?.createdAt || nowIso(),
+    order: prev?.order ?? Date.now() % 100000,
     updatedAt: nowIso(),
-    updatedBy: state.currentUser?.fullName || "admin",
+    updatedBy: state.user.fullName,
   };
-  await positionsRef.child(id).set(record);
-  await writeLog("outbound", existingId ? "position_updated" : "position_created", {
-    id,
-    title: record.title,
-    status: record.status,
-  });
-  return record;
+  await R.positions.child(id).set(rec);
+  return rec;
 }
 
-async function setPositionStatus(id, status) {
-  const p = state.positions[id];
-  if (!p) throw new Error("Не найдено");
-  await positionsRef.child(id).update({
-    status,
-    updatedAt: nowIso(),
-    updatedBy: state.currentUser?.fullName || "admin",
-  });
-  await writeLog("outbound", "position_status", { id, title: p.title, status });
+async function setPosStatus(id, status) {
+  await R.positions.child(id).update({ status, updatedAt: nowIso(), updatedBy: state.user.fullName });
 }
-
-async function deletePosition(id) {
-  const p = state.positions[id];
-  if (!p) return;
-  const linked = appList().filter((a) => a.positionId === id).length;
-  if (linked > 0) {
-    await setPositionStatus(id, "closed");
-    return { soft: true, linked };
+async function deletePos(id) {
+  if (appsForPos(id).length) {
+    await setPosStatus(id, "closed");
+    return { soft: true };
   }
-  await positionsRef.child(id).remove();
-  await writeLog("system", "position_deleted", { id, title: p.title });
+  await R.positions.child(id).remove();
   return { soft: false };
 }
 
-/* ===== Boot animation (лёгкая) ===== */
-function runBoot(done) {
-  const screen = $("#decryptingScreen");
-  const log = $("#terminalLog");
-  const fill = $("#cyberProgressFill");
-  const pct = $("#cyberPercent");
-  if (!screen) return done();
-  screen.style.display = "flex";
-  const lines = [
-    "> INIT CALLDESK MODULE…",
-    "> LINK FIREBASE RTDB…",
-    "> LOAD POSITIONS / QUEUE…",
-    "> AUTH GATE READY…",
-    "> CHANNEL SECURE",
-  ];
-  let i = 0;
-  let p = 0;
-  const t = setInterval(() => {
-    if (i < lines.length && log) {
-      log.innerHTML += `<div>${lines[i++]}</div>`;
-      log.scrollTop = log.scrollHeight;
-    }
-    p = Math.min(100, p + 12);
-    if (fill) fill.style.width = p + "%";
-    if (pct) pct.textContent = p + "%";
-    if (p >= 100) {
-      clearInterval(t);
-      setTimeout(() => {
-        screen.style.display = "none";
-        done();
-      }, 250);
-    }
-  }, 120);
+/* ===== Views ===== */
+function show(view) {
+  state.view = view;
+  ["home", "my", "review", "admin"].forEach((v) => {
+    const el = $("#view-" + v);
+    if (el) el.classList.toggle("page-hidden", v !== view);
+  });
+  render();
+  window.scrollTo(0, 0);
 }
 
-/* ===== Matrix bg (лёгкий) ===== */
-function initMatrix() {
-  const c = $("#loginMatrixCanvas");
-  if (!c) return;
-  const ctx = c.getContext("2d");
-  let w, h, cols, drops;
-  function resize() {
-    w = c.width = window.innerWidth;
-    h = c.height = window.innerHeight;
-    cols = Math.floor(w / 18);
-    drops = Array(cols).fill(1);
-  }
-  resize();
-  window.addEventListener("resize", resize);
-  const chars = "01АСУЛСОБЗВОН█▓▒░";
-  function draw() {
-    if ($("#loginScreen")?.style.display === "none") {
-      requestAnimationFrame(draw);
-      return;
-    }
-    ctx.fillStyle = "rgba(5,7,12,0.12)";
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(207,161,52,0.35)";
-    ctx.font = "12px monospace";
-    for (let i = 0; i < drops.length; i++) {
-      const ch = chars[Math.floor(Math.random() * chars.length)];
-      ctx.fillText(ch, i * 18, drops[i] * 16);
-      if (drops[i] * 16 > h && Math.random() > 0.975) drops[i] = 0;
-      drops[i]++;
-    }
-    requestAnimationFrame(draw);
-  }
-  draw();
+function render() {
+  if (!state.user) return;
+  $("#stOpen").textContent = openPositions().length;
+  $("#stMine").textContent = myApps().length;
+  $("#sideUser").innerHTML = `<div style="color:#fff;font-weight:700;margin-bottom:4px;">${esc(
+    state.user.fullName
+  )}</div><span class="role-badge ${esc(state.user.role)}">${esc(roleLabel(state.user.role))}</span>`;
+
+  if (state.view === "home") renderHome();
+  if (state.view === "my") renderMy();
+  if (state.view === "review") renderReview();
+  if (state.view === "admin") renderAdmin();
+  renderSideRecent();
 }
 
-/* ===== Auth UI ===== */
-function showLoginError(msg) {
-  const el = $("#loginError");
-  if (!el) return;
-  el.style.display = msg ? "block" : "none";
-  el.textContent = msg || "";
-}
-function showRegError(msg) {
-  const el = $("#registerError");
-  if (!el) return;
-  el.style.display = msg ? "block" : "none";
-  el.textContent = msg || "";
-}
-
-function enterApp(user) {
-  state.currentUser = user;
-  sessionStorage.setItem("asuls_calls_user", JSON.stringify(user));
-  $("#loginScreen").style.display = "none";
-  $("#appContent").style.display = "block";
-  $("#userDisplay").textContent = `${user.fullName} · ${roleLabel(user.role)}`;
-  $("#manageUsersBtn").style.display = isAdmin() ? "" : "none";
-  $("#tabAdminBtn").style.display = isAdmin() ? "" : "none";
-  $("#usersAdminCard").style.display = isAdmin() ? "" : "none";
-  $("#hostLabel").textContent = user.fullName;
-  addLogEntry(`Авторизация: ${user.fullName} (${user.role})`);
-  switchTab("home");
-  renderAll();
-}
-
-function roleLabel(r) {
-  if (r === "admin") return "Начальство";
-  if (r === "host") return "Ведущий";
-  return "Оператор";
-}
-
-function logout() {
-  if (state.currentUser) addLogEntry(`Выход: ${state.currentUser.fullName}`);
-  state.currentUser = null;
-  sessionStorage.removeItem("asuls_calls_user");
-  $("#appContent").style.display = "none";
-  $("#loginScreen").style.display = "flex";
-  $("#loginPassword").value = "";
-  $("#loginMasterPassword").value = "";
-}
-
-/* ===== Tabs ===== */
-function switchTab(tab) {
-  state.tab = tab;
-  $$(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  $$(".panel").forEach((p) => p.classList.toggle("active", p.id === "panel-" + tab));
-  if (tab === "host") renderHost();
-  if (tab === "admin") renderAdmin();
-  if (tab === "protocol") renderProtocol();
-  if (tab === "results") renderResults();
-  if (tab === "positions") renderPositions();
-  if (tab === "apply") renderApply();
-  if (tab === "home") renderHome();
-}
-
-/* ===== Renderers ===== */
-function renderAll() {
-  const s = stats();
-  $("#stQueue").textContent = s.queue;
-  $("#stCallback").textContent = s.callback;
-  $("#stPass").textContent = s.pass;
-  $("#stTotal").textContent = s.total;
-  $("#stOpenPos").textContent = s.openPos;
-  $("#stCalls").textContent = s.calls;
-  $("#tabPosCount").textContent = s.openPos;
-  $("#tabQueueCount").textContent = s.queue + s.callback;
-
-  // status select options
-  const resSel = $("#resStatus");
-  if (resSel && resSel.options.length <= 1) {
-    Object.entries(STATUS_META).forEach(([k, v]) => {
-      const o = document.createElement("option");
-      o.value = k;
-      o.textContent = v.label;
-      resSel.appendChild(o);
-    });
-  }
-
-  if (state.tab === "home") renderHome();
-  if (state.tab === "positions") renderPositions();
-  if (state.tab === "apply") renderApply();
-  if (state.tab === "host") renderHost();
-  if (state.tab === "results") renderResults();
-  if (state.tab === "admin") renderAdmin();
-  if (state.tab === "protocol") renderProtocol();
+function renderSideRecent() {
+  const list = (isReviewer() ? allApps() : myApps()).slice(0, 5);
+  $("#sideRecent").innerHTML = list.length
+    ? list
+        .map(
+          (a) => `<div class="side-user">
+      <div class="av">${esc((a.name || "?").slice(0, 1).toUpperCase())}</div>
+      <div style="min-width:0">
+        <div style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(
+          a.positionTitle || posTitle(a.positionId)
+        )}</div>
+        <div class="text-sm muted">${badge(a.status)} · ${esc(fmt(a.updatedAt || a.createdAt))}</div>
+      </div>
+    </div>`
+        )
+        .join("")
+    : `<div class="text-sm muted">Нет заявок</div>`;
 }
 
 function renderHome() {
-  const queue = appList()
-    .filter((a) => ["new", "queued", "callback", "noanswer", "calling"].includes(a.status))
-    .slice(0, 6);
-  const recent = Object.values(state.results)
-    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
-    .slice(0, 6);
-
-  $("#homeQueue").innerHTML = queue.length
-    ? `<div class="data-table-wrap"><table class="data"><thead><tr><th>Игрок</th><th>Должность</th><th>Статус</th></tr></thead><tbody>
-      ${queue
-        .map(
-          (a) => `<tr>
-        <td><div class="fw-700">${esc(a.rpName)}</div><div class="text-sm mono muted">${esc(a.discord)}</div></td>
-        <td>${esc(posTitle(a.positionId))}</td>
-        <td>${badge(a.status)}</td>
-      </tr>`
-        )
-        .join("")}
-      </tbody></table></div>`
-    : `<div class="empty-state"><i class="fas fa-inbox"></i><h4>Очередь пуста</h4></div>`;
-
-  $("#homeResults").innerHTML = recent.length
-    ? `<div class="data-table-wrap"><table class="data"><thead><tr><th>Игрок</th><th>Итог</th><th>Когда</th></tr></thead><tbody>
-      ${recent
-        .map(
-          (r) => `<tr>
-        <td class="fw-700">${esc(r.rpName)}</td>
-        <td>${badge(r.status)}</td>
-        <td class="text-sm muted">${esc(fmtDate(r.updatedAt))}</td>
-      </tr>`
-        )
-        .join("")}
-      </tbody></table></div>`
-    : `<div class="empty-state"><i class="fas fa-flag"></i><h4>Пока нет результатов</h4></div>`;
-}
-
-function renderPositions() {
-  const open = Object.values(state.positions).filter((p) => p.status === "open");
+  const list = openPositions();
   const closed = Object.values(state.positions).filter((p) => p.status !== "open");
-  const card = (p, canApply) => {
-    const n = appList().filter((a) => a.positionId === p.id).length;
-    const st =
-      p.status === "open" ? ["Вакантна", "b-open"] : p.status === "draft" ? ["Черновик", "b-draft"] : ["Снята", "b-closed"];
-    return `<article class="card pos-card-body">
-      <div class="inline-actions" style="justify-content:space-between;margin-bottom:8px;">
-        <div>
-          <h3>${esc(p.title)}</h3>
-          <div class="dept">${esc(p.department)} · ${esc(p.level || "")}</div>
-        </div>
-        <span class="badge ${st[1]}">${st[0]}</span>
-      </div>
-      <div class="desc">${esc(p.summary || "")}</div>
-      <div class="tags">
-        ${(p.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}
-        <span class="tag">мест: ${esc(p.slots || 1)}</span>
-        <span class="tag">заявок: ${n}</span>
-      </div>
-      <details>
-        <summary class="text-sm muted" style="cursor:pointer">Требования и обязанности</summary>
-        <div class="text-sm muted mt-8">
-          <strong style="color:#cfa134">Требования</strong>
-          <ul style="margin:6px 0 10px 16px">${(p.requirements || []).map((x) => `<li>${esc(x)}</li>`).join("") || "<li>—</li>"}</ul>
-          <strong style="color:#cfa134">Обязанности</strong>
-          <ul style="margin:6px 0 0 16px">${(p.duties || []).map((x) => `<li>${esc(x)}</li>`).join("") || "<li>—</li>"}</ul>
-        </div>
-      </details>
-      ${
-        canApply
-          ? `<button type="button" class="btn btn--gold mt-12" data-goto-apply="${esc(p.id)}"><i class="fas fa-file-signature"></i> Подать заявку</button>`
-          : `<div class="text-sm muted mt-12">Набор закрыт</div>`
-      }
-    </article>`;
-  };
-  $("#positionsGrid").innerHTML =
-    (open.map((p) => card(p, true)).join("") ||
-      `<div class="empty-state"><i class="fas fa-briefcase"></i><h4>Нет открытых вакансий</h4><p>Нет открытых вакансий</p></div>`) +
-    (closed.length
-      ? `<div class="full" style="grid-column:1/-1;margin-top:8px;color:#718096;font-weight:700;text-transform:uppercase;font-size:0.75rem;letter-spacing:.06em;">Снятые / черновики</div>` +
-        closed.map((p) => card(p, false)).join("")
-      : "");
+  if (!state.selectedPosId && list[0]) state.selectedPosId = list[0].id;
 
-  $$("[data-goto-apply]").forEach((b) => {
-    b.addEventListener("click", () => {
-      const id = b.getAttribute("data-goto-apply");
-      switchTab("apply");
-      const sel = $("#applyPositionSelect");
-      if (sel) sel.value = id;
-    });
+  $("#vacancyList").innerHTML = list.length
+    ? list
+        .map((p) => {
+          const n = appsForPos(p.id).length;
+          return `<article class="vacancy-item ${
+            state.selectedPosId === p.id ? "active" : ""
+          }" data-pos="${esc(p.id)}">
+          <h3>${esc(p.title)}</h3>
+          <div class="meta">${esc(p.department || "")} · мест: ${esc(p.slots || 1)} · заявок: ${n}</div>
+          <div class="summary">${esc(p.summary || "")}</div>
+        </article>`;
+        })
+        .join("")
+    : `<div class="empty-state"><h4>Нет открытых должностей</h4></div>`;
+
+  if (closed.length) {
+    $("#vacancyList").innerHTML += closed
+      .map(
+        (p) => `<article class="vacancy-item" style="opacity:.55;cursor:default;">
+        <h3>${esc(p.title)}</h3>
+        <div class="meta">${esc(p.department || "")} · закрыта</div>
+      </article>`
+      )
+      .join("");
+  }
+
+  $$("#vacancyList [data-pos]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.selectedPosId = el.getAttribute("data-pos");
+      $("#applyCard").style.display = "none";
+      renderHome();
+    })
+  );
+
+  const p = state.positions[state.selectedPosId];
+  const box = $("#posDetail");
+  if (!p || p.status !== "open") {
+    box.innerHTML = `<div class="empty-state"><p>Выберите должность</p></div>`;
+    return;
+  }
+  box.innerHTML = `
+    <div style="font-size:1.15rem;font-weight:800;color:#fff;margin-bottom:4px;">${esc(p.title)}</div>
+    <div class="text-sm muted mb-12">${esc(p.department || "")} · мест: ${esc(p.slots || 1)}</div>
+    <div class="detail-block"><label>Описание</label>${esc(p.summary || "—")}</div>
+    <div class="detail-block"><label>Требования</label>${
+      (p.requirements || []).map((x) => "• " + esc(x)).join("\n") || "—"
+    }</div>
+    <div class="detail-block"><label>Обязанности</label>${
+      (p.duties || []).map((x) => "• " + esc(x)).join("\n") || "—"
+    }</div>
+    <button type="button" class="btn btn--gold" id="btnStartApply"><i class="fas fa-file-signature"></i> Подать заявку</button>
+  `;
+  $("#btnStartApply")?.addEventListener("click", () => {
+    $("#applyPosId").value = p.id;
+    $("#applyPosTitle").textContent = p.title;
+    $("#applyCard").style.display = "";
+    $("#applyCard").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }
 
-function renderApply() {
-  const open = Object.values(state.positions).filter((p) => p.status === "open");
-  const sel = $("#applyPositionSelect");
-  const cur = sel?.value || "";
-  if (sel) {
-    sel.innerHTML =
-      `<option value="">— выберите —</option>` +
-      open
-        .map(
-          (p) =>
-            `<option value="${esc(p.id)}" ${cur === p.id ? "selected" : ""}>${esc(p.title)} · ${esc(p.department)}</option>`
-        )
-        .join("");
-  }
-  $("#applyOpenList").innerHTML = open.length
-    ? open.map((p) => `<li style="margin-bottom:6px"><strong>${esc(p.title)}</strong></li>`).join("")
-    : "<li>Нет открытых</li>";
+function statusSteps(st) {
+  const order = ["new", "review", "interview", "accepted"];
+  const fail = st === "rejected" || st === "withdrawn";
+  return `<div class="status-steps">
+    ${order
+      .map((s) => {
+        const on =
+          !fail &&
+          order.indexOf(s) <= Math.max(0, order.indexOf(st === "rejected" ? -1 : st));
+        const active = s === st;
+        return `<span class="status-step ${on || active ? "on" : ""}">${esc(STATUS[s].label)}</span>`;
+      })
+      .join("")}
+    ${fail ? `<span class="status-step on">${esc(STATUS[st]?.label || st)}</span>` : ""}
+  </div>`;
 }
 
-function renderHost() {
-  if (!isHost() && !isAdmin()) {
-    $("#queueList").innerHTML = `<li class="empty-state"><h4>Недостаточно прав</h4><p>Нужна роль ведущего или администратора</p></li>`;
-    $("#callCard").innerHTML = `<div class="empty-state"><i class="fas fa-lock"></i><h4>Доступ ограничен</h4></div>`;
+function renderMy() {
+  const list = myApps();
+  $("#myList").innerHTML = list.length
+    ? list
+        .map(
+          (a) => `<div class="app-card">
+      <div class="app-top">
+        <div>
+          <div class="app-title">${esc(a.positionTitle || posTitle(a.positionId))}</div>
+          <div class="app-sub">${esc(a.name)} · ${esc(a.staticId)} · ${esc(fmt(a.createdAt))}</div>
+        </div>
+        ${badge(a.status)}
+      </div>
+      ${statusSteps(a.status)}
+      ${a.note ? `<div class="detail-block mt-12"><label>Комментарий</label>${esc(a.note)}</div>` : ""}
+      ${
+        ["new", "review"].includes(a.status)
+          ? `<button type="button" class="btn btn--secondary mt-12" data-withdraw="${esc(
+              a.id
+            )}">Отозвать</button>`
+          : ""
+      }
+    </div>`
+        )
+        .join("")
+    : `<div class="empty-state"><h4>Заявок нет</h4></div>`;
+
+  $$("[data-withdraw]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Отозвать заявку?")) return;
+      try {
+        await withdrawApp(b.getAttribute("data-withdraw"));
+        toast("Отозвано", "ok");
+      } catch (e) {
+        toast(e.message, "err");
+      }
+    })
+  );
+}
+
+function renderReview() {
+  if (!isReviewer()) {
+    $("#revList").innerHTML = `<div class="empty-state"><h4>Нет доступа</h4></div>`;
     return;
   }
-
-  // fill pos filter
-  const pf = $("#hostFilterPos");
-  if (pf) {
-    const cur = state.hostFilterPos;
-    pf.innerHTML =
-      `<option value="">Все должности</option>` +
-      Object.values(state.positions)
-        .map(
-          (p) =>
-            `<option value="${esc(p.id)}" ${cur === p.id ? "selected" : ""}>${esc(p.title)}</option>`
-        )
-        .join("");
-  }
-  const sf = $("#hostFilterStatus");
-  if (sf) sf.value = state.hostFilterStatus;
-
-  let list = appList();
-  if (state.hostFilterStatus === "active") {
-    list = list.filter((a) =>
-      ["new", "queued", "calling", "callback", "noanswer", "interview"].includes(a.status)
-    );
-  } else if (state.hostFilterStatus !== "all") {
-    list = list.filter((a) => a.status === state.hostFilterStatus);
-  }
-  if (state.hostFilterPos) list = list.filter((a) => a.positionId === state.hostFilterPos);
+  let list = allApps();
+  const f = state.revFilter;
+  if (f === "active") list = list.filter((a) => ["new", "review", "interview"].includes(a.status));
+  else if (f !== "all") list = list.filter((a) => a.status === f);
 
   const selected =
     (state.selectedAppId && state.applications[state.selectedAppId]) || list[0] || null;
   if (selected) state.selectedAppId = selected.id;
 
-  $("#queueList").innerHTML = list.length
+  $("#revList").innerHTML = list.length
     ? list
         .map(
-          (a) => `<li class="queue-item ${selected && a.id === selected.id ? "active" : ""}" data-app="${esc(a.id)}">
-        <div class="inline-actions" style="justify-content:space-between">
-          <div class="qi-name">${esc(a.rpName)}</div>
-          ${badge(a.status)}
-        </div>
-        <div class="qi-meta">${esc(posTitle(a.positionId))}</div>
-        <div class="qi-dc">${esc(a.discord)}</div>
-      </li>`
+          (a) => `<div class="review-item ${selected && a.id === a.id && selected.id === a.id ? "active" : ""} ${
+            selected?.id === a.id ? "active" : ""
+          }" data-app="${esc(a.id)}">
+        <div class="fw-700" style="color:#fff;">${esc(a.name)}</div>
+        <div class="text-sm muted">${esc(a.positionTitle || posTitle(a.positionId))}</div>
+        <div class="mt-8">${badge(a.status)}</div>
+      </div>`
         )
         .join("")
-    : `<li class="empty-state"><h4>Пусто</h4></li>`;
+    : `<div class="empty-state"><h4>Пусто</h4></div>`;
 
-  $$("#queueList [data-app]").forEach((el) => {
+  $$("#revList [data-app]").forEach((el) =>
     el.addEventListener("click", () => {
       state.selectedAppId = el.getAttribute("data-app");
-      state.selectedResult = null;
-      renderHost();
-    });
-  });
+      renderReview();
+    })
+  );
 
-  renderCallCard(selected);
-  renderScript(selected);
-}
-
-function renderCallCard(selected) {
-  const box = $("#callCard");
+  const box = $("#revCard");
   if (!selected) {
-    box.innerHTML = `<div class="empty-state"><i class="fas fa-user"></i><h4>Выберите кандидата</h4></div>`;
+    box.innerHTML = `<div class="empty-state"><h4>Выберите заявку</h4></div>`;
     return;
   }
-  const script = state.scripts.default || SEED_SCRIPT;
   box.innerHTML = `
-    <div class="inline-actions" style="justify-content:space-between;align-items:flex-start">
+    <div class="inline-actions" style="justify-content:space-between;margin-bottom:12px;">
       <div>
-        <div class="candidate-title">${esc(selected.rpName)}</div>
-        <div class="discord-lg mt-8">${esc(selected.discord)}</div>
+        <div style="font-size:1.25rem;font-weight:800;color:#fff;">${esc(selected.name)}</div>
+        <div class="text-sm muted mt-8">${esc(selected.positionTitle || posTitle(selected.positionId))}</div>
         <div class="mt-8">${badge(selected.status)}</div>
       </div>
-      <div class="inline-actions" style="flex-direction:column;align-items:stretch">
-        <button type="button" class="btn btn--gold" id="btnCopyDc"><i class="fas fa-copy"></i> Discord</button>
-        <a class="btn btn--secondary" href="https://discord.com/channels/@me" target="_blank" rel="noopener"><i class="fab fa-discord"></i> Открыть</a>
-      </div>
+      <button type="button" class="btn btn--gold" id="btnCopyDc"><i class="fas fa-copy"></i> ${esc(
+        selected.discord
+      )}</button>
     </div>
-    <div class="divider"></div>
-    <div class="info-rows">
-      <div class="ir"><span class="k">Должность</span><span class="v">${esc(posTitle(selected.positionId))}</span></div>
-      <div class="ir"><span class="k">Static</span><span class="v">${esc(selected.staticId || "—")}</span></div>
-      <div class="ir"><span class="k">Город</span><span class="v">${esc(selected.city || "—")}</span></div>
-      <div class="ir"><span class="k">Онлайн</span><span class="v">${esc(selected.timezone || "—")}</span></div>
-      <div class="ir"><span class="k">Подана</span><span class="v">${esc(fmtDate(selected.createdAt))}</span></div>
-    </div>
+    <div class="detail-block"><label>Static ID</label>${esc(selected.staticId || "—")}</div>
+    <div class="detail-block"><label>Discord</label>${esc(selected.discord || "—")}</div>
+    <div class="detail-block"><label>Возраст / онлайн</label>${esc(selected.age || "—")} · ${esc(
+      selected.online || "—"
+    )}</div>
+    <div class="detail-block"><label>Текущая должность</label>${esc(selected.currentRole || "—")}</div>
+    <div class="detail-block"><label>Опыт</label>${esc(selected.experience || "—")}</div>
+    <div class="detail-block"><label>Мотивация</label>${esc(selected.motivation || "—")}</div>
     ${
-      selected.experience
-        ? `<div class="alert-box info mt-12"><strong>Опыт:</strong> ${esc(selected.experience)}</div>`
+      selected.extra
+        ? `<div class="detail-block"><label>Дополнительно</label>${esc(selected.extra)}</div>`
         : ""
     }
-    ${
-      selected.notes
-        ? `<div class="alert-box warn mt-8"><strong>Комментарий:</strong> ${esc(selected.notes)}</div>`
-        : ""
-    }
-    <div class="divider"></div>
-    <h3 style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.06em;color:#718096;margin-bottom:10px;">Ответы на вопросы</h3>
-    <ul class="q-list" id="qList">
-      ${(script.questions || [])
-        .map((q, i) => {
-          const prev = (selected.answers && selected.answers["q" + i]) || "";
-          return `<li class="q-item">
-            <div class="q-text">${i + 1}. ${esc(q)}</div>
-            <textarea data-qi="${i}" placeholder="Краткий ответ / пометки…">${esc(prev)}</textarea>
-          </li>`;
-        })
-        .join("")}
-    </ul>
-    <div class="divider"></div>
-    <h3 style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.06em;color:#718096;margin-bottom:10px;">Результат</h3>
-    <div class="result-grid" id="resultGrid">
-      ${CALL_RESULTS.map(
-        (r) =>
-          `<button type="button" class="result-btn ${
-            state.selectedResult === r.id ? "selected" : ""
-          }" data-result="${esc(r.id)}">${esc(r.label)}</button>`
-      ).join("")}
-    </div>
-    <div class="form-group mt-12" id="cbField" style="display:${
-      state.selectedResult === "callback" || state.selectedResult === "noanswer" ? "" : "none"
-    }">
-      <label>Когда перезвонить</label>
-      <input type="datetime-local" id="callbackAt" />
-    </div>
     <div class="form-group mt-12">
-      <label>Комментарий к звонку</label>
-      <textarea id="callNote" rows="3" placeholder="Что сказал, риски…">${esc(
-        selected.lastNote || ""
-      )}</textarea>
+      <label>Комментарий</label>
+      <textarea id="revNote" rows="3">${esc(selected.note || "")}</textarea>
     </div>
-    <div class="form-group mt-12">
-      <label>Публичная пометка на табло</label>
-      <input id="publicNote" placeholder="Напр.: Прошёл, ждёт куратора" />
+    <div class="inline-actions mt-12">
+      <button type="button" class="btn btn--primary" data-st="review">В рассмотрение</button>
+      <button type="button" class="btn btn--gold" data-st="interview">Собеседование</button>
+      <button type="button" class="btn btn--gold" data-st="accepted" style="background:linear-gradient(135deg,#2f9e5f,#48bb78);">Принять</button>
+      <button type="button" class="btn btn--danger" data-st="rejected">Отказ</button>
     </div>
-    <div class="inline-actions mt-16">
-      <button type="button" class="btn btn--gold" id="btnSaveCall"><i class="fas fa-save"></i> Сохранить результат</button>
-      <button type="button" class="btn btn--primary" id="btnMarkCalling"><i class="fas fa-play"></i> В работу</button>
-      ${
-        isAdmin()
-          ? `<button type="button" class="btn btn--danger" id="btnDelApp"><i class="fas fa-trash"></i> Удалить</button>`
-          : ""
-      }
-    </div>
+    <div class="text-sm muted mt-12">Подана: ${esc(fmt(selected.createdAt))} · автор: ${esc(
+      selected.owner || "—"
+    )}</div>
   `;
 
   $("#btnCopyDc")?.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(selected.discord);
-      toast("Discord скопирован", "ok");
+      toast("Скопировано", "ok");
     } catch {
       toast(selected.discord, "ok");
     }
   });
-  $("#resultGrid")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-result]");
-    if (!btn) return;
-    state.selectedResult = btn.getAttribute("data-result");
-    $$(".result-btn").forEach((b) => b.classList.remove("selected"));
-    btn.classList.add("selected");
-    const cb = $("#cbField");
-    if (cb)
-      cb.style.display =
-        state.selectedResult === "callback" || state.selectedResult === "noanswer" ? "" : "none";
-  });
-  $("#btnMarkCalling")?.addEventListener("click", async () => {
-    try {
-      await setAppStatus(selected.id, "calling");
-      toast("В работе", "ok");
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  });
-  $("#btnDelApp")?.addEventListener("click", async () => {
-    if (!confirm("Удалить заявку?")) return;
-    try {
-      state.selectedAppId = null;
-      await deleteApplication(selected.id);
-      toast("Удалено", "ok");
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  });
-  $("#btnSaveCall")?.addEventListener("click", async () => {
-    if (!state.selectedResult) {
-      toast("Выберите результат", "warn");
-      return;
-    }
-    const answers = {};
-    $$("#qList textarea").forEach((t) => {
-      answers["q" + t.getAttribute("data-qi")] = t.value;
-    });
-    let callbackAt = null;
-    const cb = $("#callbackAt");
-    if (cb?.value) callbackAt = new Date(cb.value).toISOString();
-    const btn = $("#btnSaveCall");
-    btn.disabled = true;
-    try {
-      await saveCallOutcome(selected.id, {
-        resultId: state.selectedResult,
-        note: $("#callNote")?.value || "",
-        publicNote: $("#publicNote")?.value || "",
-        answers,
-        callbackAt,
-      });
-      state.selectedResult = null;
-      toast("Результат сохранён и опубликован", "ok");
-    } catch (e) {
-      console.error(e);
-      toast(e.message || "Ошибка", "err");
-    } finally {
-      btn.disabled = false;
-    }
-  });
-}
-
-function renderScript(selected) {
-  const body = $("#scriptBody");
-  if (!selected) {
-    body.innerHTML = `<div class="empty-state"><p>Скрипт появится после выбора</p></div>`;
-    return;
-  }
-  const script = state.scripts.default || SEED_SCRIPT;
-  const pos = state.positions[selected.positionId];
-  const fill = (t) =>
-    (t || "")
-      .replaceAll("{host}", state.currentUser?.fullName || "Ведущий")
-      .replaceAll("{position}", pos?.title || posTitle(selected.positionId))
-      .replaceAll("{department}", pos?.department || "")
-      .replaceAll("{name}", selected.rpName || "");
-  body.innerHTML = `
-    <div class="script-block"><h4>Приветствие</h4><div class="bubble">${esc(fill(script.greeting))}</div></div>
-    <div class="script-block"><h4>Если занят</h4><div class="bubble alt">${esc(fill(script.ifBusy))}</div></div>
-    <div class="script-block"><h4>Суть</h4><div class="bubble">${esc(fill(script.pitch))}</div></div>
-    <div class="script-block"><h4>При интересе</h4><div class="bubble">${esc(fill(script.closePass))}</div></div>
-    <div class="script-block"><h4>При отказе</h4><div class="bubble alt">${esc(fill(script.closeFail))}</div></div>
-  `;
-}
-
-function renderResults() {
-  let list = Object.values(state.results).sort((a, b) =>
-    (b.updatedAt || "").localeCompare(a.updatedAt || "")
+  $$("#revCard [data-st]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      try {
+        await setAppStatus(selected.id, b.getAttribute("data-st"), $("#revNote")?.value || "");
+        toast("Сохранено", "ok");
+      } catch (e) {
+        toast(e.message || "Ошибка", "err");
+      }
+    })
   );
-  if (state.resStatus) list = list.filter((r) => r.status === state.resStatus);
-  if (state.resQ) {
-    const q = state.resQ.toLowerCase();
-    list = list.filter((r) =>
-      [r.rpName, r.discordTag, r.positionTitle, r.publicNote].join(" ").toLowerCase().includes(q)
-    );
-  }
-  const tb = $("#resultsTable tbody");
-  tb.innerHTML = list.length
-    ? list
-        .map(
-          (r) => `<tr>
-      <td class="fw-700">${esc(r.rpName)}</td>
-      <td class="mono text-sm">${esc(r.discordTag || "—")}</td>
-      <td>${esc(r.positionTitle || posTitle(r.positionId))}</td>
-      <td>${badge(r.status)}</td>
-      <td class="text-sm muted">${esc(r.publicNote || "—")}</td>
-      <td class="text-sm muted">${esc(fmtDate(r.updatedAt))}</td>
-    </tr>`
-        )
-        .join("")
-    : `<tr><td colspan="6"><div class="empty-state"><h4>Нет результатов</h4></div></td></tr>`;
 }
 
 function renderAdmin() {
   if (!isAdmin()) {
-    $("#adminPosTable tbody").innerHTML = `<tr><td colspan="4"><div class="empty-state"><h4>Только для начальства</h4></div></td></tr>`;
+    $("#adminTable tbody").innerHTML = `<tr><td colspan="4">Нет доступа</td></tr>`;
     return;
   }
-  const list = Object.values(state.positions).sort((a, b) => {
-    const order = { open: 0, draft: 1, closed: 2 };
-    return (order[a.status] ?? 9) - (order[b.status] ?? 9) || (a.title || "").localeCompare(b.title || "", "ru");
-  });
-  $("#adminPosTable tbody").innerHTML = list.length
+  const list = Object.values(state.positions).sort(
+    (a, b) => (a.order || 0) - (b.order || 0) || (a.title || "").localeCompare(b.title || "", "ru")
+  );
+  $("#adminTable tbody").innerHTML = list.length
     ? list
         .map((p) => {
-          const n = appList().filter((a) => a.positionId === p.id).length;
-          const st =
-            p.status === "open"
-              ? ["Вакантна", "b-open"]
-              : p.status === "draft"
-                ? ["Черновик", "b-draft"]
-                : ["Снята", "b-closed"];
+          const n = appsForPos(p.id).length;
           return `<tr>
-            <td>
-              <div class="fw-700">${esc(p.title)}</div>
-              <div class="text-sm muted">${esc(p.department || "")} · мест: ${esc(p.slots || 1)}</div>
-            </td>
-            <td><span class="badge ${st[1]}">${st[0]}</span></td>
-            <td>${n}</td>
-            <td>
-              <div class="table-actions">
-                ${
-                  p.status === "open"
-                    ? `<button type="button" class="btn btn--secondary" style="padding:6px 10px;font-size:0.78rem" data-pos-close="${esc(p.id)}">Снять</button>`
-                    : `<button type="button" class="btn btn--gold" style="padding:6px 10px;font-size:0.78rem" data-pos-open="${esc(p.id)}">Открыть</button>`
-                }
-                <button type="button" class="btn btn--primary" style="padding:6px 10px;font-size:0.78rem" data-pos-edit="${esc(p.id)}">Изменить</button>
-                <button type="button" class="btn btn--danger" style="padding:6px 10px;font-size:0.78rem" data-pos-del="${esc(p.id)}">✕</button>
-              </div>
-            </td>
-          </tr>`;
+          <td><div class="fw-700">${esc(p.title)}</div><div class="text-sm muted">${esc(
+            p.department || ""
+          )}</div></td>
+          <td><span class="badge ${p.status === "open" ? "b-open" : "b-closed"}">${
+            p.status === "open" ? "Открыта" : "Закрыта"
+          }</span></td>
+          <td>${n}</td>
+          <td>
+            <div class="table-actions">
+              ${
+                p.status === "open"
+                  ? `<button type="button" class="btn btn--secondary" style="padding:6px 10px;font-size:0.78rem" data-close="${esc(
+                      p.id
+                    )}">Закрыть</button>`
+                  : `<button type="button" class="btn btn--gold" style="padding:6px 10px;font-size:0.78rem" data-open="${esc(
+                      p.id
+                    )}">Открыть</button>`
+              }
+              <button type="button" class="btn btn--primary" style="padding:6px 10px;font-size:0.78rem" data-edit="${esc(
+                p.id
+              )}">Изменить</button>
+              <button type="button" class="btn btn--danger" style="padding:6px 10px;font-size:0.78rem" data-del="${esc(
+                p.id
+              )}">✕</button>
+            </div>
+          </td>
+        </tr>`;
         })
         .join("")
-    : `<tr><td colspan="4"><div class="empty-state"><h4>Пусто — создайте вакансию</h4></div></td></tr>`;
+    : `<tr><td colspan="4"><div class="empty-state"><h4>Пусто</h4></div></td></tr>`;
 
-  $$("[data-pos-open]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      try {
-        await setPositionStatus(b.getAttribute("data-pos-open"), "open");
-        toast("Вакансия открыта", "ok");
-      } catch (e) {
-        toast(e.message, "err");
-      }
-    })
+  $$("[data-open]").forEach((b) =>
+    b.addEventListener("click", () => setPosStatus(b.getAttribute("data-open"), "open").then(() => toast("Открыта", "ok")))
   );
-  $$("[data-pos-close]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const id = b.getAttribute("data-pos-close");
-      if (!confirm("Снять вакансию с набора?")) return;
-      try {
-        await setPositionStatus(id, "closed");
-        toast("Вакансия снята", "ok");
-      } catch (e) {
-        toast(e.message, "err");
-      }
-    })
-  );
-  $$("[data-pos-edit]").forEach((b) =>
+  $$("[data-close]").forEach((b) =>
     b.addEventListener("click", () => {
-      fillPosForm(b.getAttribute("data-pos-edit"));
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (!confirm("Закрыть должность?")) return;
+      setPosStatus(b.getAttribute("data-close"), "closed").then(() => toast("Закрыта", "ok"));
     })
   );
-  $$("[data-pos-del]").forEach((b) =>
+  $$("[data-edit]").forEach((b) =>
+    b.addEventListener("click", () => fillPos(b.getAttribute("data-edit")))
+  );
+  $$("[data-del]").forEach((b) =>
     b.addEventListener("click", async () => {
-      const id = b.getAttribute("data-pos-del");
-      if (!confirm("Удалить? При наличии заявок — только снятие.")) return;
-      try {
-        const res = await deletePosition(id);
-        toast(res?.soft ? `Есть заявки (${res.linked}) — снята` : "Удалено", res?.soft ? "warn" : "ok");
-        if (state.editingPosId === id) resetPosForm();
-      } catch (e) {
-        toast(e.message, "err");
-      }
+      if (!confirm("Удалить? При наличии заявок — только закрытие.")) return;
+      const r = await deletePos(b.getAttribute("data-del"));
+      toast(r.soft ? "Закрыта (есть заявки)" : "Удалена", r.soft ? "warn" : "ok");
+      resetPos();
     })
   );
 }
 
-function fillPosForm(id) {
+function fillPos(id) {
   const p = state.positions[id];
   if (!p) return;
   state.editingPosId = id;
-  $("#posFormTitle").textContent = "Редактирование вакансии";
-  $("#posExistingId").value = id;
+  $("#posFormTitle").textContent = "Редактирование";
+  $("#posId").value = id;
   $("#posTitle").value = p.title || "";
   $("#posDept").value = p.department || "";
-  $("#posLevel").value = p.level || "руководитель";
   $("#posStatus").value = p.status || "open";
   $("#posSlots").value = p.slots || 1;
   $("#posSummary").value = p.summary || "";
-  $("#posTags").value = (p.tags || []).join(", ");
   $("#posReq").value = (p.requirements || []).join("\n");
   $("#posDuties").value = (p.duties || []).join("\n");
-  $("#posFormCancel").style.display = "";
+  $("#posCancel").style.display = "";
 }
-
-function resetPosForm() {
+function resetPos() {
   state.editingPosId = null;
-  $("#posFormTitle").textContent = "Поставить вакансию";
+  $("#posFormTitle").textContent = "Новая должность";
   $("#posForm").reset();
-  $("#posExistingId").value = "";
-  $("#posFormCancel").style.display = "none";
+  $("#posId").value = "";
+  $("#posCancel").style.display = "none";
 }
 
-function renderProtocol() {
-  const logs = Object.values(state.logs).sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-  $("#protocolLog").innerHTML = logs.length
-    ? logs
-        .map((l) => {
-          const cls =
-            l.direction === "inbound" ? "plog-in" : l.direction === "outbound" ? "plog-out" : "plog-sys";
-          const tag =
-            l.direction === "inbound" ? "IN" : l.direction === "outbound" ? "OUT" : "SYS";
-          return `<div class="plog-line">
-            <span class="plog-time">${esc(fmtDate(l.at))}</span>
-            <span class="${cls}">[${tag}]</span>
-            ${esc(l.kind)}
-            ${l.user ? "· " + esc(l.user) : ""}
-            · <span class="mono">${esc(JSON.stringify(l.payload || {}))}</span>
-          </div>`;
-        })
-        .join("")
-    : `<div class="plog-line"><span class="plog-sys">[СИСТЕМА]</span> Нет записей</div>`;
-
-  const apps = appList();
-  $("#rawAppsTable tbody").innerHTML = apps
-    .map(
-      (a) => `<tr>
-      <td>${esc(a.rpName)}</td>
-      <td class="mono text-sm">${esc(a.discord)}</td>
-      <td>${esc(posTitle(a.positionId))}</td>
-      <td>${badge(a.status)}</td>
-    </tr>`
-    )
-    .join("") || `<tr><td colspan="4" class="muted">Нет заявок</td></tr>`;
-
-  const calls = Object.values(state.calls).sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-  $("#rawCallsTable tbody").innerHTML =
-    calls
-      .map(
-        (c) => `<tr>
-      <td class="text-sm">${esc(fmtDate(c.at))}</td>
-      <td>${esc(c.rpName)}</td>
-      <td>${badge(c.status)}</td>
-      <td>${esc(c.host || "—")}</td>
-    </tr>`
-      )
-      .join("") || `<tr><td colspan="4" class="muted">Нет звонков</td></tr>`;
-
-  if (isAdmin()) renderUsers();
+/* ===== Auth / UI ===== */
+function enter(user) {
+  state.user = user;
+  sessionStorage.setItem("asuls_apps_user", JSON.stringify(user));
+  $("#loginScreen").style.display = "none";
+  $("#appContent").style.display = "block";
+  $("#userDisplay").textContent = `${user.fullName} · ${roleLabel(user.role)}`;
+  $("#btnReview").style.display = isReviewer() ? "" : "none";
+  $("#btnAdmin").style.display = isAdmin() ? "" : "none";
+  show("home");
+}
+function logout() {
+  state.user = null;
+  sessionStorage.removeItem("asuls_apps_user");
+  $("#appContent").style.display = "none";
+  $("#loginScreen").style.display = "flex";
 }
 
-function renderUsers() {
-  const tb = $("#usersTable tbody");
-  if (!tb) return;
-  tb.innerHTML = state.users
-    .map(
-      (u, i) => `<tr>
-      <td>${esc(u.fullName)}</td>
-      <td><span class="role-badge ${esc(u.role)}">${esc(roleLabel(u.role))}</span></td>
-      <td class="table-actions">
-        <button type="button" class="btn btn--secondary" style="padding:6px 10px;font-size:0.78rem" data-user-role="${i}">Роль</button>
-        <button type="button" class="btn btn--danger" style="padding:6px 10px;font-size:0.78rem" data-user-del="${i}">✕</button>
-      </td>
-    </tr>`
-    )
-    .join("");
-
-  $$("[data-user-role]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const i = Number(b.getAttribute("data-user-role"));
-      const u = state.users[i];
-      if (!u) return;
-      const cycle = { user: "host", host: "admin", admin: "user" };
-      u.role = cycle[u.role] || "user";
-      await usersRef.set(state.users);
-      await writeLog("system", "user_role", { name: u.fullName, role: u.role });
-      toast(`${u.fullName} → ${roleLabel(u.role)}`, "ok");
-    })
-  );
-  $$("[data-user-del]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const i = Number(b.getAttribute("data-user-del"));
-      const u = state.users[i];
-      if (!u || u.fullName === state.currentUser?.fullName) {
-        toast("Нельзя удалить себя", "warn");
-        return;
+function initMatrix() {
+  const c = $("#loginMatrixCanvas");
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  let w, h, cols, drops;
+  const resize = () => {
+    w = c.width = innerWidth;
+    h = c.height = innerHeight;
+    cols = Math.floor(w / 18);
+    drops = Array(cols).fill(1);
+  };
+  resize();
+  addEventListener("resize", resize);
+  const chars = "01АСУЛСЗАЯВКИ█▓";
+  (function draw() {
+    if ($("#loginScreen")?.style.display !== "none") {
+      ctx.fillStyle = "rgba(5,7,12,0.12)";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "rgba(207,161,52,0.3)";
+      ctx.font = "12px monospace";
+      for (let i = 0; i < drops.length; i++) {
+        ctx.fillText(chars[(Math.random() * chars.length) | 0], i * 18, drops[i] * 16);
+        if (drops[i] * 16 > h && Math.random() > 0.975) drops[i] = 0;
+        drops[i]++;
       }
-      if (!confirm("Удалить пользователя " + u.fullName + "?")) return;
-      state.users.splice(i, 1);
-      await usersRef.set(state.users);
-      await writeLog("system", "user_deleted", { name: u.fullName });
-      toast("Удалено", "ok");
-    })
-  );
+    }
+    requestAnimationFrame(draw);
+  })();
 }
 
-/* ===== Bind UI once ===== */
 function bindUi() {
-  // tabs
-  $$("#mainTabs .tab-btn").forEach((btn) => {
-    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-  });
-
-  // login
-  $("#loginForm").addEventListener("submit", (e) => {
+  $("#loginForm").onsubmit = (e) => {
     e.preventDefault();
-    const name = $("#loginFullName").value.trim();
-    const pass = $("#loginPassword").value;
-    const master = $("#loginMasterPassword").value;
-    if (master !== getMasterPassword()) {
-      showLoginError("Неверный мастер-пароль");
+    if ($("#loginMaster").value !== getMaster()) {
+      $("#loginError").style.display = "block";
+      $("#loginError").textContent = "Неверный мастер-пароль";
       return;
     }
+    const name = $("#loginName").value.trim();
+    const pass = $("#loginPass").value;
     const user = state.users.find(
       (u) => u.fullName.toLowerCase() === name.toLowerCase() && u.password === pass
     );
     if (!user) {
-      showLoginError("Неверные учётные данные");
+      $("#loginError").style.display = "block";
+      $("#loginError").textContent = "Неверные данные";
       return;
     }
-    showLoginError("");
-    enterApp(user);
-  });
+    $("#loginError").style.display = "none";
+    enter(user);
+  };
 
-  $("#registerBtn").addEventListener("click", () => {
-    $("#registerModal").style.display = "flex";
-  });
-  $("#registerClose").addEventListener("click", () => {
-    $("#registerModal").style.display = "none";
-  });
-  $("#registerForm").addEventListener("submit", async (e) => {
+  $("#openReg").onclick = () => ($("#regModal").style.display = "flex");
+  $("#regClose").onclick = () => ($("#regModal").style.display = "none");
+  $("#regForm").onsubmit = async (e) => {
     e.preventDefault();
-    const fullName = $("#regFullName").value.trim();
-    const password = $("#regPassword").value;
-    const master = $("#regMasterPassword").value;
-    if (master !== getMasterPassword()) {
-      showRegError("Неверный мастер-пароль");
+    if ($("#regMaster").value !== getMaster()) {
+      $("#regError").style.display = "block";
+      $("#regError").textContent = "Неверный мастер-пароль";
       return;
     }
+    const fullName = $("#regName").value.trim();
+    const password = $("#regPass").value;
     if (state.users.some((u) => u.fullName.toLowerCase() === fullName.toLowerCase())) {
-      showRegError("Такой пользователь уже есть");
+      $("#regError").style.display = "block";
+      $("#regError").textContent = "Уже существует";
       return;
     }
     state.users.push({ fullName, password, role: "user" });
-    await usersRef.set(state.users);
-    await writeLog("system", "user_registered", { fullName });
-    showRegError("");
-    $("#registerModal").style.display = "none";
-    toast("Зарегистрирован. Войдите.", "ok");
-    $("#loginFullName").value = fullName;
-  });
+    await R.users.set(state.users);
+    $("#regModal").style.display = "none";
+    toast("Аккаунт создан", "ok");
+    $("#loginName").value = fullName;
+  };
 
-  $("#logoutBtn").addEventListener("click", logout);
-  $("#manageUsersBtn").addEventListener("click", () => {
-    switchTab("protocol");
-    $("#usersAdminCard").scrollIntoView({ behavior: "smooth" });
-  });
+  $("#btnLogout").onclick = logout;
+  $("#goHome").onclick = () => show("home");
+  $$("[data-back-home]").forEach((b) => (b.onclick = () => show("home")));
+  $("#btnMy").onclick = () => show("my");
+  $("#btnReview").onclick = () => show("review");
+  $("#btnAdmin").onclick = () => show("admin");
 
-  $("#exportJsonBtn").addEventListener("click", () => {
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            exportedAt: nowIso(),
-            positions: state.positions,
-            applications: state.applications,
-            calls: state.calls,
-            results: state.results,
-            logs: state.logs,
-            users: state.users.map((u) => ({ fullName: u.fullName, role: u.role })),
-          },
-          null,
-          2
-        ),
-      ],
-      { type: "application/json" }
-    );
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "asuls-calldesk-export.json";
-    a.click();
-    addLogEntry("Экспорт JSON");
-  });
-
-  // apply
-  $("#applyForm").addEventListener("submit", async (e) => {
+  $("#applyCancel").onclick = () => {
+    $("#applyCard").style.display = "none";
+    $("#applyForm").reset();
+  };
+  $("#applyForm").onsubmit = async (e) => {
     e.preventDefault();
-    const fd = new FormData(e.target);
-    const data = Object.fromEntries(fd.entries());
     const btn = e.target.querySelector('[type="submit"]');
     btn.disabled = true;
     try {
-      const rec = await submitApplication(data);
-      toast("Заявка отправлена", "ok");
-      const ok = $("#applyOk");
-      ok.style.display = "";
-      ok.innerHTML = `<div class="alert-box ok">Заявка принята: ${esc(rec.rpName)} — «${esc(
-        posTitle(rec.positionId)
-      )}»</div>`;
+      await submitApp({
+        positionId: $("#applyPosId").value,
+        name: $("#aName").value,
+        staticId: $("#aStatic").value,
+        discord: $("#aDiscord").value,
+        age: $("#aAge").value,
+        online: $("#aOnline").value,
+        currentRole: $("#aCurrent").value,
+        experience: $("#aExp").value,
+        motivation: $("#aWhy").value,
+        extra: $("#aExtra").value,
+      });
+      toast("Заявка подана", "ok");
       e.target.reset();
-      renderApply();
-    } catch (err) {
-      console.error(err);
-      toast(err.message || "Ошибка сохранения", "err");
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  // host filters
-  $("#hostFilterStatus")?.addEventListener("change", (e) => {
-    state.hostFilterStatus = e.target.value;
-    renderHost();
-  });
-  $("#hostFilterPos")?.addEventListener("change", (e) => {
-    state.hostFilterPos = e.target.value;
-    renderHost();
-  });
-
-  // results filters
-  $("#resStatus")?.addEventListener("change", (e) => {
-    state.resStatus = e.target.value;
-    renderResults();
-  });
-  $("#resQ")?.addEventListener("input", (e) => {
-    state.resQ = e.target.value;
-    clearTimeout(state._qt);
-    state._qt = setTimeout(() => renderResults(), 180);
-  });
-
-  // admin form
-  $("#posForm")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!isAdmin()) return toast("Нет прав", "err");
-    const fd = new FormData(e.target);
-    const data = Object.fromEntries(fd.entries());
-    const existingId = data.existingId || null;
-    const btn = e.target.querySelector('[type="submit"]');
-    btn.disabled = true;
-    try {
-      const rec = await savePosition(data, existingId || null);
-      toast(existingId ? "Сохранено" : "Вакансия поставлена: " + rec.title, "ok");
-      resetPosForm();
+      $("#applyCard").style.display = "none";
+      show("my");
     } catch (err) {
       toast(err.message || "Ошибка", "err");
     } finally {
       btn.disabled = false;
     }
-  });
-  $("#posFormCancel")?.addEventListener("click", resetPosForm);
+  };
 
-  $("#btnRefreshLog")?.addEventListener("click", () => renderProtocol());
+  $("#revFilter").onchange = (e) => {
+    state.revFilter = e.target.value;
+    renderReview();
+  };
 
-  $("#newUserForm")?.addEventListener("submit", async (e) => {
+  $("#posForm").onsubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin()) return;
-    const fullName = $("#newUserName").value.trim();
-    const password = $("#newUserPass").value;
-    const role = $("#newUserRole").value;
-    if (state.users.some((u) => u.fullName.toLowerCase() === fullName.toLowerCase())) {
-      return toast("Уже существует", "warn");
+    try {
+      await savePos(
+        {
+          title: $("#posTitle").value,
+          department: $("#posDept").value,
+          status: $("#posStatus").value,
+          slots: $("#posSlots").value,
+          summary: $("#posSummary").value,
+          requirements: $("#posReq").value,
+          duties: $("#posDuties").value,
+        },
+        $("#posId").value || null
+      );
+      toast("Сохранено", "ok");
+      resetPos();
+    } catch (err) {
+      toast(err.message || "Ошибка", "err");
     }
-    state.users.push({ fullName, password, role });
-    await usersRef.set(state.users);
-    await writeLog("system", "user_created", { fullName, role });
-    e.target.reset();
-    toast("Пользователь добавлен", "ok");
-    renderUsers();
-  });
+  };
+  $("#posCancel").onclick = resetPos;
 }
 
-/* ===== Start ===== */
 async function start() {
   initMatrix();
   bindUi();
   try {
     await ensureSeed();
-    bindData();
+    bind();
   } catch (e) {
     console.error(e);
     toast("Нет связи с базой", "err");
   }
-
-  // session restore
   try {
-    const raw = sessionStorage.getItem("asuls_calls_user");
+    const raw = sessionStorage.getItem("asuls_apps_user");
     if (raw) {
-      const u = JSON.parse(raw);
-      // wait a tick for users cache
       setTimeout(() => {
+        const u = JSON.parse(raw);
         const found = state.users.find(
           (x) => x.fullName === u.fullName && x.password === u.password
         );
-        if (found) enterApp(found);
+        if (found) enter(found);
       }, 600);
     }
   } catch (_) {}
 }
 
-// boot then start
-runBoot(() => start());
+start();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>АСУЛС · Модуль обзвонов</title>
+  <title>АСУЛС · Заявки</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -14,389 +14,253 @@
 </head>
 <body>
 
-  <!-- BOOT -->
-  <div id="decryptingScreen" class="decrypting-screen" style="display:none;">
-    <div class="decrypting-container">
-      <div class="scanner-line"></div>
-      <div class="terminal-header">
-        <i class="fas fa-shield-alt"></i> АСУЛС · МОДУЛЬ ОБЗВОНОВ : ИНИЦИАЛИЗАЦИЯ
-      </div>
-      <div class="terminal-body" id="terminalLog"></div>
-      <div class="cyber-progress-bar">
-        <div class="cyber-progress-fill" id="cyberProgressFill"></div>
-      </div>
-      <div class="percent-display" id="cyberPercent">0%</div>
-    </div>
-  </div>
-
-  <!-- LOGIN -->
   <div id="loginScreen" class="login-screen">
     <canvas id="loginMatrixCanvas" style="position:absolute;inset:0;z-index:-1;pointer-events:none;"></canvas>
     <div class="login-card">
       <div class="login-logo">
         <i class="fas fa-shield-alt"></i>
-        <span>АСУЛС · ОБЗВОН</span>
+        <span>АСУЛС · ЗАЯВКИ</span>
       </div>
       <p class="login-sub">Вход в систему</p>
       <form id="loginForm" class="login-form">
         <div class="form-group">
-          <label for="loginFullName">ФИО</label>
-          <input type="text" id="loginFullName" placeholder="Иванов И.И." required autocomplete="username" />
+          <label for="loginName">ФИО</label>
+          <input id="loginName" required placeholder="Иванов И.И." autocomplete="username" />
         </div>
         <div class="form-group">
-          <label for="loginPassword">Личный пароль</label>
-          <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" />
+          <label for="loginPass">Пароль</label>
+          <input id="loginPass" type="password" required autocomplete="current-password" />
         </div>
         <div class="form-group">
-          <label for="loginMasterPassword">Мастер-пароль</label>
-          <input type="password" id="loginMasterPassword" placeholder="••••••" required maxlength="6" inputmode="numeric" />
+          <label for="loginMaster">Мастер-пароль</label>
+          <input id="loginMaster" type="password" required maxlength="6" inputmode="numeric" />
         </div>
-        <button type="submit" class="btn btn--gold btn--full"><i class="fas fa-sign-in-alt"></i> Войти</button>
+        <button class="btn btn--gold btn--full" type="submit"><i class="fas fa-sign-in-alt"></i> Войти</button>
         <div id="loginError" class="login-error" style="display:none;"></div>
       </form>
       <div style="margin-top:12px;">
-        <button type="button" id="registerBtn" class="btn btn--secondary btn--full">
-          <i class="fas fa-user-plus"></i> Зарегистрироваться
-        </button>
+        <button type="button" id="openReg" class="btn btn--secondary btn--full"><i class="fas fa-user-plus"></i> Регистрация</button>
       </div>
     </div>
   </div>
 
-  <!-- REGISTER MODAL -->
-  <div id="registerModal" class="modal" style="display:none;">
+  <div id="regModal" class="modal" style="display:none;">
     <div class="modal-content">
-      <span class="modal-close" id="registerClose">&times;</span>
-      <h3><i class="fas fa-user-plus"></i> Регистрация оператора</h3>
-      <form id="registerForm">
+      <span class="modal-close" id="regClose">&times;</span>
+      <h3><i class="fas fa-user-plus"></i> Регистрация</h3>
+      <form id="regForm">
         <div class="form-group">
-          <label for="regFullName">ФИО</label>
-          <input type="text" id="regFullName" required placeholder="Иванов И.И." />
+          <label>ФИО</label>
+          <input id="regName" required />
         </div>
         <div class="form-group">
-          <label for="regPassword">Пароль</label>
-          <input type="password" id="regPassword" required minlength="4" />
+          <label>Пароль</label>
+          <input id="regPass" type="password" required minlength="4" />
         </div>
         <div class="form-group">
-          <label for="regMasterPassword">Мастер-пароль</label>
-          <input type="password" id="regMasterPassword" required maxlength="6" inputmode="numeric" />
+          <label>Мастер-пароль</label>
+          <input id="regMaster" type="password" required maxlength="6" />
         </div>
-        <button type="submit" class="btn btn--gold"><i class="fas fa-check"></i> Зарегистрироваться</button>
-        <div id="registerError" class="login-error" style="display:none;"></div>
+        <button type="submit" class="btn btn--gold"><i class="fas fa-check"></i> Создать</button>
+        <div id="regError" class="login-error" style="display:none;"></div>
       </form>
     </div>
   </div>
 
-  <!-- APP -->
   <div id="appContent" style="display:none;">
     <header class="header">
       <div class="container header__inner">
-        <div class="header__logo">
+        <div class="header__logo" id="goHome" style="cursor:pointer;">
           <i class="fas fa-shield-alt"></i>
-          <span>АСУЛС · ОБЗВОН</span>
+          <span>АСУЛС · ЗАЯВКИ</span>
         </div>
         <div class="header__actions">
-          <span id="liveStatus" class="live-pill off"><span class="dot"></span> RTDB</span>
+          <span id="liveStatus" class="live-pill off"><span class="dot"></span> …</span>
           <span id="userDisplay" class="user-display"></span>
-          <button type="button" id="manageUsersBtn" class="btn btn--gold" style="display:none;">
-            <i class="fas fa-users-cog"></i> Пользователи
-          </button>
-          <button type="button" id="exportJsonBtn" class="btn btn--gold">
-            <i class="fas fa-file-export"></i> JSON
-          </button>
-          <button type="button" id="logoutBtn" class="btn btn--secondary">
-            <i class="fas fa-sign-out-alt"></i> Выйти
-          </button>
+          <button type="button" class="btn btn--gold" id="btnMy"><i class="fas fa-folder-open"></i> Мои заявки</button>
+          <button type="button" class="btn btn--gold" id="btnReview" style="display:none;"><i class="fas fa-clipboard-list"></i> Рассмотрение</button>
+          <button type="button" class="btn btn--gold" id="btnAdmin" style="display:none;"><i class="fas fa-briefcase"></i> Должности</button>
+          <button type="button" class="btn btn--secondary" id="btnLogout"><i class="fas fa-sign-out-alt"></i> Выйти</button>
         </div>
       </div>
     </header>
 
-    <main class="container main">
-      <nav class="nav-tabs" id="mainTabs">
-        <button type="button" class="tab-btn active" data-tab="home"><i class="fas fa-home"></i> Обзор</button>
-        <button type="button" class="tab-btn" data-tab="positions"><i class="fas fa-briefcase"></i> Вакансии <span class="tab-count" id="tabPosCount">0</span></button>
-        <button type="button" class="tab-btn" data-tab="apply"><i class="fas fa-file-signature"></i> Заявка</button>
-        <button type="button" class="tab-btn" data-tab="host"><i class="fas fa-headset"></i> Обзвон <span class="tab-count" id="tabQueueCount">0</span></button>
-        <button type="button" class="tab-btn" data-tab="results"><i class="fas fa-clipboard-check"></i> Результаты</button>
-        <button type="button" class="tab-btn" data-tab="admin" id="tabAdminBtn" style="display:none;"><i class="fas fa-user-shield"></i> Начальство</button>
-        <button type="button" class="tab-btn" data-tab="protocol"><i class="fas fa-terminal"></i> Протокол</button>
-      </nav>
+    <main class="container main" style="padding-top:22px;padding-bottom:48px;">
 
-      <!-- HOME -->
-      <section class="panel active" id="panel-home">
-        <div class="card stats-card">
-          <h2 class="card__title"><i class="fas fa-chart-pie"></i> Оперативная сводка</h2>
-          <div class="stats-grid" id="statsContainer">
-            <div class="stat-item">
-              <i class="fas fa-inbox stat-icon" style="color:#4299e1;"></i>
-              <div class="stat-info-container">
-                <span class="stat-label">В очереди</span>
-                <span class="stat-value" id="stQueue">0</span>
-              </div>
-            </div>
-            <div class="stat-item">
-              <i class="fas fa-phone-alt stat-icon" style="color:#f1c40f;"></i>
-              <div class="stat-info-container">
-                <span class="stat-label">Перезвон / недозвон</span>
-                <span class="stat-value" id="stCallback">0</span>
-              </div>
-            </div>
-            <div class="stat-item">
-              <i class="fas fa-check-circle stat-icon" style="color:#48bb78;"></i>
-              <div class="stat-info-container">
-                <span class="stat-label">Прошли</span>
-                <span class="stat-value" id="stPass">0</span>
-              </div>
-            </div>
-            <div class="stat-item">
-              <i class="fas fa-users stat-icon" style="color:#cfa134;"></i>
-              <div class="stat-info-container">
-                <span class="stat-label">Всего заявок</span>
-                <span class="stat-value" id="stTotal">0</span>
-              </div>
-            </div>
-            <div class="stat-item">
-              <i class="fas fa-briefcase stat-icon" style="color:#b794f4;"></i>
-              <div class="stat-info-container">
-                <span class="stat-label">Вакансий открыто</span>
-                <span class="stat-value" id="stOpenPos">0</span>
-              </div>
-            </div>
-            <div class="stat-item">
-              <i class="fas fa-phone stat-icon" style="color:#63b3ed;"></i>
-              <div class="stat-info-container">
-                <span class="stat-label">Обзвонов проведено</span>
-                <span class="stat-value" id="stCalls">0</span>
-              </div>
-            </div>
+      <!-- HOME: vacancies + apply -->
+      <section id="view-home">
+        <div class="hero-mini">
+          <h1><i class="fas fa-file-signature"></i>Подача заявок</h1>
+          <div class="inline-actions mt-12">
+            <span class="pill-stat">Открыто: <b id="stOpen">0</b></span>
+            <span class="pill-stat">Мои заявки: <b id="stMine">0</b></span>
           </div>
         </div>
 
-        <div class="two-col mt-16">
-          <div class="card">
-            <h2 class="card__title"><i class="fas fa-stream"></i> Очередь обзвона</h2>
-            <div id="homeQueue"></div>
-          </div>
-          <div class="card">
-            <h2 class="card__title"><i class="fas fa-flag-checkered"></i> Последние результаты</h2>
-            <div id="homeResults"></div>
-          </div>
-        </div>
+        <div class="apps-layout">
+          <div>
+            <div class="card" style="margin-bottom:16px;">
+              <h2 class="card__title"><i class="fas fa-list"></i> Должности</h2>
+              <div class="vacancy-list" id="vacancyList"></div>
+            </div>
 
-        </section>
+            <div class="card" id="applyCard" style="display:none;">
+              <h2 class="card__title"><i class="fas fa-pen"></i> Заявка: <span id="applyPosTitle">—</span></h2>
+              <form id="applyForm" class="form-grid-2">
+                <input type="hidden" id="applyPosId" />
+                <div class="form-group">
+                  <label>ФИО персонажа <span class="req">*</span></label>
+                  <input id="aName" required maxlength="80" />
+                </div>
+                <div class="form-group">
+                  <label>Static ID <span class="req">*</span></label>
+                  <input id="aStatic" required maxlength="32" />
+                </div>
+                <div class="form-group">
+                  <label>Discord <span class="req">*</span></label>
+                  <input id="aDiscord" required maxlength="64" />
+                </div>
+                <div class="form-group">
+                  <label>Возраст персонажа</label>
+                  <input id="aAge" maxlength="8" />
+                </div>
+                <div class="form-group">
+                  <label>Онлайн</label>
+                  <input id="aOnline" maxlength="64" placeholder="МСК, вечера" />
+                </div>
+                <div class="form-group">
+                  <label>Текущая должность</label>
+                  <input id="aCurrent" maxlength="80" />
+                </div>
+                <div class="form-group full">
+                  <label>Опыт <span class="req">*</span></label>
+                  <textarea id="aExp" rows="4" required placeholder="Опыт службы и руководства"></textarea>
+                </div>
+                <div class="form-group full">
+                  <label>Мотивация <span class="req">*</span></label>
+                  <textarea id="aWhy" rows="3" required placeholder="Почему претендуете на должность"></textarea>
+                </div>
+                <div class="form-group full">
+                  <label>Дополнительно</label>
+                  <textarea id="aExtra" rows="2"></textarea>
+                </div>
+                <div class="form-group full inline-actions">
+                  <button type="submit" class="btn btn--gold"><i class="fas fa-paper-plane"></i> Подать заявку</button>
+                  <button type="button" class="btn btn--secondary" id="applyCancel">Отмена</button>
+                </div>
+              </form>
+            </div>
 
-      <!-- POSITIONS -->
-      <section class="panel" id="panel-positions">
-        <div class="card">
-          <h2 class="card__title"><i class="fas fa-briefcase"></i> Вакантные должности</h2>
-          <div class="pos-grid" id="positionsGrid"></div>
-        </div>
-      </section>
+            <div class="card" id="posDetailCard">
+              <h2 class="card__title"><i class="fas fa-info-circle"></i> Описание</h2>
+              <div id="posDetail" class="empty-state"><p>Выберите должность слева</p></div>
+            </div>
+          </div>
 
-      <!-- APPLY -->
-      <section class="panel" id="panel-apply">
-        <div class="two-col">
-          <div class="card">
-            <h2 class="card__title"><i class="fas fa-file-signature"></i> Регистрация на обзвон</h2>
-            <form id="applyForm" class="form-grid-2">
-              <div class="form-group">
-                <label>Имя / позывной <span class="req">*</span></label>
-                <input name="rpName" required maxlength="64" placeholder="Имя персонажа" />
-              </div>
-              <div class="form-group">
-                <label>Discord <span class="req">*</span></label>
-                <input name="discord" required maxlength="64" placeholder="nickname" />
-              </div>
-              <div class="form-group">
-                <label>Static ID</label>
-                <input name="staticId" maxlength="32" placeholder="12345" />
-              </div>
-              <div class="form-group">
-                <label>Город</label>
-                <input name="city" maxlength="64" />
-              </div>
-              <div class="form-group full">
-                <label>Должность <span class="req">*</span></label>
-                <select name="positionId" id="applyPositionSelect" required>
-                  <option value="">— выберите —</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Возраст персонажа</label>
-                <input name="ageRp" maxlength="8" />
-              </div>
-              <div class="form-group">
-                <label>Онлайн / часовой пояс</label>
-                <input name="timezone" maxlength="64" placeholder="МСК, вечера" />
-              </div>
-              <div class="form-group full">
-                <label>Опыт</label>
-                <textarea name="experience" rows="3" placeholder="Опыт службы и руководства"></textarea>
-              </div>
-              <div class="form-group full">
-                <label>Комментарий</label>
-                <textarea name="notes" rows="2" placeholder="Удобное время для связи"></textarea>
-              </div>
-              <div class="form-group full">
-                <label class="check-row">
-                  <input type="checkbox" name="consent" required />
-                  <span>Подтверждаю корректность указанных данных</span>
-                </label>
-              </div>
-              <div class="form-group full">
-                <button type="submit" class="btn btn--gold"><i class="fas fa-paper-plane"></i> Отправить заявку</button>
-              </div>
-            </form>
-            <div id="applyOk" style="display:none;" class="mt-12"></div>
-          </div>
-          <div class="card">
-            <h2 class="card__title"><i class="fas fa-info-circle"></i> Порядок отбора</h2>
-            <ol style="margin-left:18px;color:#a0aec0;line-height:1.8;">
-              <li>Подача заявки</li>
-              <li>Ожидание в очереди</li>
-              <li>Обзвон</li>
-              <li>Публикация результата</li>
-            </ol>
-            <div class="divider"></div>
-            <h3 style="font-size:0.95rem;margin-bottom:8px;color:#cfa134;">Сейчас открыто</h3>
-            <ul id="applyOpenList" style="margin-left:18px;color:#a0aec0;"></ul>
-          </div>
+          <aside>
+            <div class="side-card">
+              <h3>Сессия</h3>
+              <div id="sideUser" class="text-sm muted">—</div>
+            </div>
+            <div class="side-card">
+              <h3>Последние заявки</h3>
+              <div id="sideRecent"></div>
+            </div>
+          </aside>
         </div>
       </section>
 
-      <!-- HOST / CALL -->
-      <section class="panel" id="panel-host">
-        <div class="card mb-16">
-          <h2 class="card__title"><i class="fas fa-headset"></i> Рабочее место обзвона</h2>
-          <div class="filters-bar">
-            <select id="hostFilterStatus">
-              <option value="active">Активные</option>
-              <option value="all">Все заявки</option>
-              <option value="new">Новые</option>
-              <option value="callback">Перезвон</option>
-              <option value="pass">Прошли</option>
-              <option value="fail">Не прошли</option>
-            </select>
-            <select id="hostFilterPos">
-              <option value="">Все должности</option>
-            </select>
-            <span class="spacer"></span>
-            <span class="text-sm muted">Ведущий: <strong id="hostLabel">—</strong></span>
-          </div>
+      <!-- MY APPLICATIONS -->
+      <section id="view-my" class="page-hidden">
+        <div class="toolbar-row">
+          <div class="view-title"><i class="fas fa-folder-open" style="color:#cfa134;"></i> Мои заявки</div>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
         </div>
-        <div class="call-grid">
+        <div id="myList"></div>
+      </section>
+
+      <!-- REVIEW (host/admin) -->
+      <section id="view-review" class="page-hidden">
+        <div class="toolbar-row">
+          <div class="view-title"><i class="fas fa-clipboard-list" style="color:#cfa134;"></i> Рассмотрение</div>
+          <span class="spacer"></span>
+          <select id="revFilter" style="background:#0b0e14;border:1px solid #1b2336;color:#fff;padding:8px 12px;border-radius:8px;">
+            <option value="active">В работе</option>
+            <option value="all">Все</option>
+            <option value="new">Новые</option>
+            <option value="review">На рассмотрении</option>
+            <option value="interview">Собеседование</option>
+            <option value="accepted">Приняты</option>
+            <option value="rejected">Отказ</option>
+          </select>
+          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
+        </div>
+        <div class="review-grid">
           <div class="card" style="padding:0;overflow:hidden;">
-            <div style="padding:14px 16px;border-bottom:1px solid #1b2336;">
-              <strong><i class="fas fa-list"></i> Очередь</strong>
-            </div>
-            <ul class="queue-list" id="queueList"></ul>
+            <div style="padding:12px 14px;border-bottom:1px solid #1b2336;font-weight:700;">Очередь</div>
+            <div class="review-list" id="revList"></div>
           </div>
-          <div class="card" id="callCard">
-            <div class="empty-state"><i class="fas fa-user"></i><h4>Выберите кандидата</h4><p>Слева — очередь заявок</p></div>
-          </div>
-          <div class="card" id="scriptCard">
-            <h2 class="card__title" style="margin-bottom:12px;"><i class="fas fa-scroll"></i> Скрипт</h2>
-            <div id="scriptBody" class="empty-state"><p>Скрипт появится после выбора</p></div>
+          <div class="card" id="revCard">
+            <div class="empty-state"><h4>Выберите заявку</h4></div>
           </div>
         </div>
       </section>
 
-      <!-- RESULTS -->
-      <section class="panel" id="panel-results">
-        <div class="card">
-          <h2 class="card__title"><i class="fas fa-clipboard-check"></i> Публичные результаты</h2>
-          <div class="filters-bar">
-            <select id="resStatus">
-              <option value="">Все статусы</option>
-            </select>
-            <input type="search" id="resQ" placeholder="Поиск по нику…" />
-          </div>
-          <div class="data-table-wrap">
-            <table class="data" id="resultsTable">
-              <thead>
-                <tr>
-                  <th>Игрок</th>
-                  <th>Discord</th>
-                  <th>Должность</th>
-                  <th>Статус</th>
-                  <th>Комментарий</th>
-                  <th>Обновлено</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
+      <!-- ADMIN POSITIONS -->
+      <section id="view-admin" class="page-hidden">
+        <div class="toolbar-row">
+          <div class="view-title"><i class="fas fa-briefcase" style="color:#cfa134;"></i> Должности</div>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
         </div>
-      </section>
-
-      <!-- ADMIN -->
-      <section class="panel" id="panel-admin">
         <div class="two-col">
           <div class="card">
-            <h2 class="card__title"><i class="fas fa-plus-circle"></i> <span id="posFormTitle">Поставить вакансию</span></h2>
+            <h2 class="card__title" id="posFormTitle">Новая должность</h2>
             <form id="posForm" class="form-grid-2">
-              <input type="hidden" name="existingId" id="posExistingId" value="" />
+              <input type="hidden" id="posId" />
               <div class="form-group full">
                 <label>Название <span class="req">*</span></label>
-                <input name="title" id="posTitle" required maxlength="120" placeholder="Начальник отдела …" />
+                <input id="posTitle" required maxlength="120" />
               </div>
               <div class="form-group">
                 <label>Подразделение</label>
-                <input name="department" id="posDept" maxlength="120" placeholder="Территориальное подразделение" />
-              </div>
-              <div class="form-group">
-                <label>Уровень</label>
-                <select name="level" id="posLevel">
-                  <option>руководитель</option>
-                  <option>заместитель</option>
-                  <option>старший состав</option>
-                  <option>иное</option>
-                </select>
+                <input id="posDept" maxlength="120" />
               </div>
               <div class="form-group">
                 <label>Статус</label>
-                <select name="status" id="posStatus">
-                  <option value="open">Вакантна</option>
-                  <option value="closed">Снята</option>
-                  <option value="draft">Черновик</option>
+                <select id="posStatus">
+                  <option value="open">Открыта</option>
+                  <option value="closed">Закрыта</option>
                 </select>
               </div>
               <div class="form-group">
                 <label>Мест</label>
-                <input name="slots" id="posSlots" type="number" min="1" max="50" value="1" />
+                <input id="posSlots" type="number" min="1" value="1" />
               </div>
               <div class="form-group full">
                 <label>Кратко</label>
-                <textarea name="summary" id="posSummary" rows="2"></textarea>
-              </div>
-              <div class="form-group full">
-                <label>Теги (через запятую)</label>
-                <input name="tags" id="posTags" placeholder="руководство, ДС" />
+                <textarea id="posSummary" rows="2"></textarea>
               </div>
               <div class="form-group full">
                 <label>Требования (с новой строки)</label>
-                <textarea name="requirements" id="posReq" rows="4"></textarea>
+                <textarea id="posReq" rows="4"></textarea>
               </div>
               <div class="form-group full">
                 <label>Обязанности (с новой строки)</label>
-                <textarea name="duties" id="posDuties" rows="4"></textarea>
+                <textarea id="posDuties" rows="4"></textarea>
               </div>
               <div class="form-group full inline-actions">
                 <button type="submit" class="btn btn--gold"><i class="fas fa-save"></i> Сохранить</button>
-                <button type="button" class="btn btn--secondary" id="posFormCancel" style="display:none;">Отмена</button>
+                <button type="button" class="btn btn--secondary" id="posCancel" style="display:none;">Отмена</button>
               </div>
             </form>
           </div>
-          <div class="card">
-            <h2 class="card__title"><i class="fas fa-sitemap"></i> Справочник должностей</h2>
+          <div class="card" style="padding:0;overflow:hidden;">
             <div class="data-table-wrap">
-              <table class="data" id="adminPosTable">
+              <table class="data" id="adminTable">
                 <thead>
-                  <tr>
-                    <th>Должность</th>
-                    <th>Статус</th>
-                    <th>Заявок</th>
-                    <th></th>
-                  </tr>
+                  <tr><th>Должность</th><th>Статус</th><th>Заявок</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -405,83 +269,8 @@
         </div>
       </section>
 
-      <!-- PROTOCOL / DATA -->
-      <section class="panel" id="panel-protocol">
-        <div class="card mb-16">
-          <h2 class="card__title"><i class="fas fa-terminal"></i> Протокол системной активности</h2>
-          <div class="inline-actions mb-12">
-            <button type="button" class="btn btn--secondary btn-sm" id="btnRefreshLog"><i class="fas fa-sync"></i> Обновить</button>
-            <span class="spacer"></span>
-            <span class="text-sm muted">Входящие · исходящие · система</span>
-          </div>
-          <div class="protocol-log" id="protocolLog">
-            <div class="plog-line"><span class="plog-sys">[СИСТЕМА]</span> Ожидание событий…</div>
-          </div>
-        </div>
-        <div class="two-col">
-          <div class="card">
-            <h2 class="card__title"><i class="fas fa-database"></i> Заявки (сырые)</h2>
-            <div class="data-table-wrap" style="max-height:360px;overflow:auto;">
-              <table class="data" id="rawAppsTable">
-                <thead><tr><th>Игрок</th><th>Discord</th><th>Должность</th><th>Статус</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-          <div class="card">
-            <h2 class="card__title"><i class="fas fa-phone"></i> Звонки</h2>
-            <div class="data-table-wrap" style="max-height:360px;overflow:auto;">
-              <table class="data" id="rawCallsTable">
-                <thead><tr><th>Когда</th><th>Игрок</th><th>Итог</th><th>Ведущий</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div class="card mt-16" id="usersAdminCard" style="display:none;">
-          <h2 class="card__title"><i class="fas fa-users-cog"></i> Управление пользователями</h2>
-          <div class="two-col">
-            <div>
-              <h3 style="font-size:0.9rem;color:#cfa134;margin-bottom:10px;">Добавить</h3>
-              <form id="newUserForm" class="form-grid-2">
-                <div class="form-group full">
-                  <label>ФИО</label>
-                  <input id="newUserName" required />
-                </div>
-                <div class="form-group">
-                  <label>Пароль</label>
-                  <input id="newUserPass" required minlength="4" />
-                </div>
-                <div class="form-group">
-                  <label>Роль</label>
-                  <select id="newUserRole">
-                    <option value="user">Пользователь</option>
-                    <option value="host">Ведущий обзвона</option>
-                    <option value="admin">Администратор / начальство</option>
-                  </select>
-                </div>
-                <div class="form-group full">
-                  <button type="submit" class="btn btn--gold"><i class="fas fa-plus"></i> Добавить</button>
-                </div>
-              </form>
-            </div>
-            <div>
-              <h3 style="font-size:0.9rem;color:#cfa134;margin-bottom:10px;">Список</h3>
-              <div class="data-table-wrap">
-                <table class="data" id="usersTable">
-                  <thead><tr><th>ФИО</th><th>Роль</th><th></th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
     </main>
-
-    <div class="footer-bar">
-      АСУЛС · Обзвон
-    </div>
+    <div class="footer-bar">АСУЛС · Заявки</div>
   </div>
 
   <div id="toast-host" class="toast-host"></div>

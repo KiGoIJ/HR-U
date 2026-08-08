@@ -1,14 +1,6 @@
 {
   "rules": {
-    "calldesk": {
-      ".read": true,
-      ".write": true
-    },
-    "employees": {
-      ".read": true,
-      ".write": true
-    },
-    "users": {
+    "apps": {
       ".read": true,
       ".write": true
     }
