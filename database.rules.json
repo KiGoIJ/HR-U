@@ -1,34 +1,16 @@
 {
   "rules": {
-    "rp": {
-      "positions": {
-        ".read": true,
-        ".write": true
-      },
-      "scripts": {
-        ".read": true,
-        ".write": true
-      },
-      "applications": {
-        ".read": true,
-        ".write": true
-      },
-      "calls": {
-        ".read": true,
-        ".write": true
-      },
-      "results": {
-        ".read": true,
-        ".write": true
-      },
-      "logs": {
-        ".read": true,
-        ".write": true
-      },
-      "settings": {
-        ".read": true,
-        ".write": true
-      }
+    "calldesk": {
+      ".read": true,
+      ".write": true
+    },
+    "employees": {
+      ".read": true,
+      ".write": true
+    },
+    "users": {
+      ".read": true,
+      ".write": true
     }
   }
 }
