@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>АСУЛС · Заявки</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet" />
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -13,7 +13,24 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23070a13'/%3E%3Cpath d='M16 6l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10v-6l8-4z' fill='none' stroke='%23cfa134' stroke-width='2'/%3E%3C/svg%3E" />
 </head>
 <body>
+  <div class="top-progress" id="topProgress"></div>
 
+  <!-- BOOT -->
+  <div id="decryptingScreen" class="decrypting-screen" style="display:none;">
+    <div class="decrypting-container">
+      <div class="scanner-line"></div>
+      <div class="terminal-header">
+        <i class="fas fa-shield-alt"></i> АСУЛС · КАДРОВЫЙ КОНТУР
+      </div>
+      <div class="terminal-body" id="terminalLog"></div>
+      <div class="cyber-progress-bar">
+        <div class="cyber-progress-fill" id="cyberProgressFill"></div>
+      </div>
+      <div class="percent-display" id="cyberPercent">0%</div>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
   <div id="loginScreen" class="login-screen">
     <canvas id="loginMatrixCanvas" style="position:absolute;inset:0;z-index:-1;pointer-events:none;"></canvas>
     <div class="login-card">
@@ -44,6 +61,7 @@
     </div>
   </div>
 
+  <!-- REGISTER -->
   <div id="regModal" class="modal" style="display:none;">
     <div class="modal-content">
       <span class="modal-close" id="regClose">&times;</span>
@@ -63,203 +81,264 @@
     </div>
   </div>
 
+  <!-- APP -->
   <div id="appContent" style="display:none;">
     <header class="header">
       <div class="container header__inner">
-        <div class="header__logo" id="goHome" style="cursor:pointer;">
+        <div class="header__logo" id="goHome">
           <i class="fas fa-shield-alt"></i>
           <span>АСУЛС · ЗАЯВКИ</span>
         </div>
         <div class="header__actions">
+          <span class="sys-clock" id="sysClock">--:--:--</span>
           <span id="liveStatus" class="live-pill off"><span class="dot"></span> …</span>
           <span id="userDisplay" class="user-display"></span>
-          <button type="button" class="btn btn--gold" id="btnMy"><i class="fas fa-folder-open"></i> Мои заявки</button>
-          <button type="button" class="btn btn--gold" id="btnReview" style="display:none;"><i class="fas fa-clipboard-list"></i> Рассмотрение</button>
-          <button type="button" class="btn btn--gold" id="btnAdmin" style="display:none;"><i class="fas fa-briefcase"></i> Должности</button>
-          <button type="button" class="btn btn--gold" id="btnUsers" style="display:none;"><i class="fas fa-users-cog"></i> Пользователи</button>
-          <button type="button" class="btn btn--secondary" id="btnLogout"><i class="fas fa-sign-out-alt"></i> Выйти</button>
+          <button type="button" class="btn btn--gold" id="btnMy"><i class="fas fa-folder-open"></i> <span class="hide-sm">Мои заявки</span></button>
+          <button type="button" class="btn btn--gold" id="btnReview" style="display:none;"><i class="fas fa-clipboard-list"></i> <span class="hide-sm">Рассмотрение</span></button>
+          <button type="button" class="btn btn--gold" id="btnAdmin" style="display:none;"><i class="fas fa-briefcase"></i> <span class="hide-sm">Должности</span></button>
+          <button type="button" class="btn btn--gold" id="btnUsers" style="display:none;"><i class="fas fa-users-cog"></i> <span class="hide-sm">Пользователи</span></button>
+          <button type="button" class="btn btn--secondary" id="btnLogout"><i class="fas fa-sign-out-alt"></i></button>
         </div>
       </div>
     </header>
 
     <main class="container main" style="padding-top:22px;padding-bottom:48px;">
 
-      <!-- HOME: vacancies + apply -->
+      <!-- HOME -->
       <section id="view-home">
-        <div class="hero-mini">
-          <h1><i class="fas fa-file-signature"></i>Подача заявок</h1>
-          <div class="inline-actions mt-12">
-            <span class="pill-stat">Открыто: <b id="stOpen">0</b></span>
-            <span class="pill-stat">Мои заявки: <b id="stMine">0</b></span>
+        <div class="cmd-deck">
+          <div class="cmd-deck-top">
+            <div>
+              <div class="cmd-title"><i class="fas fa-file-signature"></i> Кадровый контур</div>
+              <div class="cmd-sub" id="cmdSub">Подача и рассмотрение заявок</div>
+            </div>
+            <div class="mini-radar" title="Протокол наблюдения">
+              <svg viewBox="0 0 100 100">
+                <defs>
+                  <radialGradient id="rg" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="#4299e1" stop-opacity="0.45"/>
+                    <stop offset="100%" stop-color="#4299e1" stop-opacity="0"/>
+                  </radialGradient>
+                </defs>
+                <circle cx="50" cy="50" r="45" class="radar-ring"/>
+                <circle cx="50" cy="50" r="30" class="radar-ring"/>
+                <circle cx="50" cy="50" r="15" class="radar-ring"/>
+                <line x1="50" y1="5" x2="50" y2="95" class="radar-line"/>
+                <line x1="5" y1="50" x2="95" y2="50" class="radar-line"/>
+                <circle cx="50" cy="50" r="2" class="radar-center"/>
+                <path d="M 50,50 L 50,5 A 45,45 0 0,1 82,18 Z" class="radar-sweep" fill="url(#rg)"/>
+              </svg>
+            </div>
+          </div>
+          <div class="stats-row">
+            <div class="stat-tile info">
+              <div class="ico"><i class="fas fa-briefcase"></i></div>
+              <div><div class="lbl">Открыто</div><div class="val" id="stOpen">0</div></div>
+            </div>
+            <div class="stat-tile warn">
+              <div class="ico"><i class="fas fa-inbox"></i></div>
+              <div><div class="lbl">В работе</div><div class="val" id="stQueue">0</div></div>
+            </div>
+            <div class="stat-tile">
+              <div class="ico"><i class="fas fa-folder-open"></i></div>
+              <div><div class="lbl">Мои</div><div class="val" id="stMine">0</div></div>
+            </div>
+            <div class="stat-tile ok">
+              <div class="ico"><i class="fas fa-check-circle"></i></div>
+              <div><div class="lbl">Принято</div><div class="val" id="stAccepted">0</div></div>
+            </div>
           </div>
         </div>
 
         <div class="apps-layout">
-          <div>
-            <div class="card" style="margin-bottom:16px;">
-              <h2 class="card__title"><i class="fas fa-list"></i> Должности</h2>
+          <div class="panel">
+            <div class="panel-h">
+              <h2><i class="fas fa-list"></i> Должности</h2>
+              <span class="chip gold" id="vacCount">0</span>
+            </div>
+            <div class="panel-b">
+              <div class="search-bar">
+                <input type="search" id="posSearch" placeholder="Поиск должности…" />
+              </div>
               <div class="vacancy-list" id="vacancyList"></div>
-            </div>
-
-            <div class="card" id="applyCard" style="display:none;">
-              <h2 class="card__title"><i class="fas fa-pen"></i> Заявка: <span id="applyPosTitle">—</span></h2>
-              <form id="applyForm" class="form-grid-2">
-                <input type="hidden" id="applyPosId" />
-                <div class="form-group">
-                  <label>ФИО персонажа <span class="req">*</span></label>
-                  <input id="aName" required maxlength="80" />
-                </div>
-                <div class="form-group">
-                  <label>Static ID <span class="req">*</span></label>
-                  <input id="aStatic" required maxlength="32" />
-                </div>
-                <div class="form-group">
-                  <label>Discord <span class="req">*</span></label>
-                  <input id="aDiscord" required maxlength="64" />
-                </div>
-                <div class="form-group">
-                  <label>Возраст</label>
-                  <input id="aAge" maxlength="8" />
-                </div>
-                <div class="form-group">
-                  <label>Онлайн</label>
-                  <input id="aOnline" maxlength="64" />
-                </div>
-                <div class="form-group">
-                  <label>Текущая должность</label>
-                  <input id="aCurrent" maxlength="80" />
-                </div>
-                <div class="form-group full">
-                  <label>Опыт <span class="req">*</span></label>
-                  <textarea id="aExp" rows="4" required placeholder="Опыт службы и руководства"></textarea>
-                </div>
-                <div class="form-group full">
-                  <label>Мотивация <span class="req">*</span></label>
-                  <textarea id="aWhy" rows="3" required placeholder="Почему претендуете на должность"></textarea>
-                </div>
-                <div class="form-group full">
-                  <label>Дополнительно</label>
-                  <textarea id="aExtra" rows="2"></textarea>
-                </div>
-                <div class="form-group full inline-actions">
-                  <button type="submit" class="btn btn--gold"><i class="fas fa-paper-plane"></i> Подать заявку</button>
-                  <button type="button" class="btn btn--secondary" id="applyCancel">Отмена</button>
-                </div>
-              </form>
-            </div>
-
-            <div class="card" id="posDetailCard">
-              <h2 class="card__title"><i class="fas fa-info-circle"></i> Описание</h2>
-              <div id="posDetail" class="empty-state"><p>Выберите должность слева</p></div>
             </div>
           </div>
 
-          <aside>
+          <div>
+            <div class="panel" id="posDetailPanel">
+              <div class="panel-h">
+                <h2><i class="fas fa-id-badge"></i> Карточка</h2>
+              </div>
+              <div class="panel-b" id="posDetail">
+                <div class="empty-state"><i class="fas fa-hand-pointer"></i><h4>Выберите должность</h4></div>
+              </div>
+            </div>
+
+            <div class="panel mt-12" id="applyCard" style="display:none;margin-top:16px;">
+              <div class="panel-h">
+                <h2><i class="fas fa-pen"></i> Заявка · <span id="applyPosTitle">—</span></h2>
+              </div>
+              <div class="panel-b">
+                <form id="applyForm" class="form-grid-2">
+                  <input type="hidden" id="applyPosId" />
+                  <div class="form-group">
+                    <label>ФИО персонажа <span class="req">*</span></label>
+                    <input id="aName" required maxlength="80" />
+                  </div>
+                  <div class="form-group">
+                    <label>Static ID <span class="req">*</span></label>
+                    <input id="aStatic" required maxlength="32" />
+                  </div>
+                  <div class="form-group">
+                    <label>Discord <span class="req">*</span></label>
+                    <input id="aDiscord" required maxlength="64" />
+                  </div>
+                  <div class="form-group">
+                    <label>Возраст</label>
+                    <input id="aAge" maxlength="8" />
+                  </div>
+                  <div class="form-group">
+                    <label>Онлайн</label>
+                    <input id="aOnline" maxlength="64" placeholder="МСК, вечера" />
+                  </div>
+                  <div class="form-group">
+                    <label>Текущая должность</label>
+                    <input id="aCurrent" maxlength="80" />
+                  </div>
+                  <div class="form-group full">
+                    <label>Опыт <span class="req">*</span></label>
+                    <textarea id="aExp" rows="4" required></textarea>
+                  </div>
+                  <div class="form-group full">
+                    <label>Мотивация <span class="req">*</span></label>
+                    <textarea id="aWhy" rows="3" required></textarea>
+                  </div>
+                  <div class="form-group full">
+                    <label>Дополнительно</label>
+                    <textarea id="aExtra" rows="2"></textarea>
+                  </div>
+                  <div class="form-group full inline-actions">
+                    <button type="submit" class="btn btn--gold"><i class="fas fa-paper-plane"></i> Подать</button>
+                    <button type="button" class="btn btn--secondary" id="applyCancel">Отмена</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <aside class="side-col">
             <div class="side-card">
-              <h3>Сессия</h3>
+              <h3><i class="fas fa-user-shield"></i> Сессия</h3>
               <div id="sideUser" class="text-sm muted">—</div>
             </div>
             <div class="side-card">
-              <h3>Последние заявки</h3>
+              <h3><i class="fas fa-bolt"></i> Активность</h3>
               <div id="sideRecent"></div>
+            </div>
+            <div class="side-card">
+              <h3><i class="fas fa-terminal"></i> Протокол</h3>
+              <div class="protocol-log" id="sideLog"><div class="plog-line"><span class="plog-sys">[SYS]</span> Готов</div></div>
             </div>
           </aside>
         </div>
       </section>
 
-      <!-- MY APPLICATIONS -->
+      <!-- MY -->
       <section id="view-my" class="page-hidden">
         <div class="toolbar-row">
-          <div class="view-title"><i class="fas fa-folder-open" style="color:#cfa134;"></i> Мои заявки</div>
+          <div class="view-title"><i class="fas fa-folder-open"></i> Мои заявки</div>
           <span class="spacer"></span>
           <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
         </div>
         <div id="myList"></div>
       </section>
 
-      <!-- REVIEW (host/admin) -->
+      <!-- REVIEW -->
       <section id="view-review" class="page-hidden">
         <div class="toolbar-row">
-          <div class="view-title"><i class="fas fa-clipboard-list" style="color:#cfa134;"></i> Рассмотрение</div>
+          <div class="view-title"><i class="fas fa-clipboard-list"></i> Рассмотрение</div>
           <span class="spacer"></span>
-          <select id="revFilter" style="background:#0b0e14;border:1px solid #1b2336;color:#fff;padding:8px 12px;border-radius:8px;">
+          <input type="search" id="revSearch" class="filter-select" style="min-width:180px;" placeholder="Поиск…" />
+          <select id="revFilter" class="filter-select">
             <option value="active">В работе</option>
             <option value="all">Все</option>
             <option value="new">Новые</option>
-            <option value="review">На рассмотрении</option>
+            <option value="review">Рассмотрение</option>
             <option value="interview">Собеседование</option>
             <option value="accepted">Приняты</option>
             <option value="rejected">Отказ</option>
           </select>
-          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
+          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i></button>
         </div>
         <div class="review-grid">
-          <div class="card" style="padding:0;overflow:hidden;">
-            <div style="padding:12px 14px;border-bottom:1px solid #1b2336;font-weight:700;">Очередь</div>
+          <div class="panel" style="padding:0;">
+            <div class="panel-h"><h2><i class="fas fa-stream"></i> Очередь</h2><span class="chip" id="revCount">0</span></div>
             <div class="review-list" id="revList"></div>
           </div>
-          <div class="card" id="revCard">
-            <div class="empty-state"><h4>Выберите заявку</h4></div>
+          <div class="panel">
+            <div class="panel-b" id="revCard">
+              <div class="empty-state"><i class="fas fa-user"></i><h4>Выберите заявку</h4></div>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- ADMIN POSITIONS -->
+      <!-- ADMIN POS -->
       <section id="view-admin" class="page-hidden">
         <div class="toolbar-row">
-          <div class="view-title"><i class="fas fa-briefcase" style="color:#cfa134;"></i> Должности</div>
+          <div class="view-title"><i class="fas fa-briefcase"></i> Должности</div>
           <span class="spacer"></span>
-          <button type="button" class="btn btn--danger" id="btnClearPos"><i class="fas fa-trash"></i> Очистить все</button>
-          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
+          <button type="button" class="btn btn--danger" id="btnClearPos"><i class="fas fa-trash"></i> Очистить</button>
+          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i></button>
         </div>
         <div class="two-col">
-          <div class="card">
-            <h2 class="card__title" id="posFormTitle">Новая должность</h2>
-            <form id="posForm" class="form-grid-2">
-              <input type="hidden" id="posId" />
-              <div class="form-group full">
-                <label>Название <span class="req">*</span></label>
-                <input id="posTitle" required maxlength="120" />
-              </div>
-              <div class="form-group">
-                <label>Подразделение</label>
-                <input id="posDept" maxlength="120" />
-              </div>
-              <div class="form-group">
-                <label>Статус</label>
-                <select id="posStatus">
-                  <option value="open">Открыта</option>
-                  <option value="closed">Закрыта</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Мест</label>
-                <input id="posSlots" type="number" min="1" value="1" />
-              </div>
-              <div class="form-group full">
-                <label>Кратко</label>
-                <textarea id="posSummary" rows="2"></textarea>
-              </div>
-              <div class="form-group full">
-                <label>Требования (с новой строки)</label>
-                <textarea id="posReq" rows="4"></textarea>
-              </div>
-              <div class="form-group full">
-                <label>Обязанности (с новой строки)</label>
-                <textarea id="posDuties" rows="4"></textarea>
-              </div>
-              <div class="form-group full inline-actions">
-                <button type="submit" class="btn btn--gold"><i class="fas fa-save"></i> Сохранить</button>
-                <button type="button" class="btn btn--secondary" id="posCancel" style="display:none;">Отмена</button>
-              </div>
-            </form>
+          <div class="panel">
+            <div class="panel-h"><h2 id="posFormTitle"><i class="fas fa-plus"></i> Новая должность</h2></div>
+            <div class="panel-b">
+              <form id="posForm" class="form-grid-2">
+                <input type="hidden" id="posId" />
+                <div class="form-group full">
+                  <label>Название <span class="req">*</span></label>
+                  <input id="posTitle" required maxlength="120" />
+                </div>
+                <div class="form-group">
+                  <label>Подразделение</label>
+                  <input id="posDept" maxlength="120" />
+                </div>
+                <div class="form-group">
+                  <label>Статус</label>
+                  <select id="posStatus">
+                    <option value="open">Открыта</option>
+                    <option value="closed">Закрыта</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Мест</label>
+                  <input id="posSlots" type="number" min="1" value="1" />
+                </div>
+                <div class="form-group full">
+                  <label>Кратко</label>
+                  <textarea id="posSummary" rows="2"></textarea>
+                </div>
+                <div class="form-group full">
+                  <label>Требования</label>
+                  <textarea id="posReq" rows="4" placeholder="Каждое с новой строки"></textarea>
+                </div>
+                <div class="form-group full">
+                  <label>Обязанности</label>
+                  <textarea id="posDuties" rows="4" placeholder="Каждое с новой строки"></textarea>
+                </div>
+                <div class="form-group full inline-actions">
+                  <button type="submit" class="btn btn--gold"><i class="fas fa-save"></i> Сохранить</button>
+                  <button type="button" class="btn btn--secondary" id="posCancel" style="display:none;">Отмена</button>
+                </div>
+              </form>
+            </div>
           </div>
-          <div class="card" style="padding:0;overflow:hidden;">
+          <div class="panel" style="padding:0;overflow:hidden;">
             <div class="data-table-wrap">
               <table class="data" id="adminTable">
-                <thead>
-                  <tr><th>Должность</th><th>Статус</th><th>Заявок</th><th></th></tr>
-                </thead>
+                <thead><tr><th>Должность</th><th>Статус</th><th>Заявок</th><th></th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -267,53 +346,52 @@
         </div>
       </section>
 
-      <!-- ADMIN USERS -->
+      <!-- USERS -->
       <section id="view-users" class="page-hidden">
         <div class="toolbar-row">
-          <div class="view-title"><i class="fas fa-users-cog" style="color:#cfa134;"></i> Пользователи</div>
+          <div class="view-title"><i class="fas fa-users-cog"></i> Пользователи</div>
           <span class="spacer"></span>
-          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i> Назад</button>
+          <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i></button>
         </div>
         <div class="two-col">
-          <div class="card">
-            <h2 class="card__title" id="userFormTitle">Новый пользователь</h2>
-            <form id="userForm" class="form-grid-2">
-              <input type="hidden" id="userIndex" value="" />
-              <div class="form-group full">
-                <label>ФИО <span class="req">*</span></label>
-                <input id="userName" required maxlength="80" />
-              </div>
-              <div class="form-group">
-                <label>Пароль</label>
-                <input id="userPass" type="text" maxlength="64" autocomplete="new-password" />
-              </div>
-              <div class="form-group">
-                <label>Роль</label>
-                <select id="userRole">
-                  <option value="user">Кандидат</option>
-                  <option value="reviewer">Кадровик</option>
-                  <option value="admin">Начальство</option>
-                </select>
-              </div>
-              <div class="form-group full inline-actions">
-                <button type="submit" class="btn btn--gold"><i class="fas fa-save"></i> Сохранить</button>
-                <button type="button" class="btn btn--secondary" id="userCancel" style="display:none;">Отмена</button>
-              </div>
-            </form>
+          <div class="panel">
+            <div class="panel-h"><h2 id="userFormTitle"><i class="fas fa-user-plus"></i> Новый пользователь</h2></div>
+            <div class="panel-b">
+              <form id="userForm" class="form-grid-2">
+                <input type="hidden" id="userIndex" value="" />
+                <div class="form-group full">
+                  <label>ФИО <span class="req">*</span></label>
+                  <input id="userName" required maxlength="80" />
+                </div>
+                <div class="form-group">
+                  <label>Пароль</label>
+                  <input id="userPass" type="text" maxlength="64" autocomplete="new-password" />
+                </div>
+                <div class="form-group">
+                  <label>Роль</label>
+                  <select id="userRole">
+                    <option value="user">Кандидат</option>
+                    <option value="reviewer">Кадровик</option>
+                    <option value="admin">Начальство</option>
+                  </select>
+                </div>
+                <div class="form-group full inline-actions">
+                  <button type="submit" class="btn btn--gold"><i class="fas fa-save"></i> Сохранить</button>
+                  <button type="button" class="btn btn--secondary" id="userCancel" style="display:none;">Отмена</button>
+                </div>
+              </form>
+            </div>
           </div>
-          <div class="card" style="padding:0;overflow:hidden;">
+          <div class="panel" style="padding:0;overflow:hidden;">
             <div class="data-table-wrap">
               <table class="data" id="usersTable">
-                <thead>
-                  <tr><th>ФИО</th><th>Роль</th><th>Пароль</th><th></th></tr>
-                </thead>
+                <thead><tr><th>ФИО</th><th>Роль</th><th>Пароль</th><th></th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
           </div>
         </div>
       </section>
-
     </main>
     <div class="footer-bar">АСУЛС · Заявки</div>
   </div>
