@@ -2253,3 +2253,81 @@ textarea:focus-visible,
   .cmd-title { font-size: 1.2rem; }
   .btn span.hide-sm { display: none; }
 }
+
+/* ===== APPLY FOREGROUND MODAL ===== */
+.apply-modal {
+  z-index: 10050 !important;
+  padding: 20px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3, 5, 10, 0.88) !important;
+  backdrop-filter: blur(12px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.15) !important;
+}
+.apply-modal-content {
+  max-width: 720px !important;
+  width: min(720px, 96vw) !important;
+  max-height: min(92vh, 900px);
+  overflow-y: auto;
+  padding: 28px 30px 24px !important;
+  border: 1px solid rgba(207, 161, 52, 0.28) !important;
+  box-shadow:
+    0 40px 80px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(207, 161, 52, 0.08),
+    0 0 40px rgba(207, 161, 52, 0.08) !important;
+  animation: applyModalIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.apply-modal-content::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #cfa134, transparent);
+  border-radius: 16px 16px 0 0;
+}
+.apply-modal-content h3 {
+  margin-bottom: 8px !important;
+  padding-right: 36px;
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+}
+.apply-modal-sub {
+  color: #718096;
+  font-size: 0.85rem;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.apply-modal-actions {
+  display: flex !important;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  margin-bottom: 0 !important;
+}
+.apply-modal-actions .btn {
+  width: auto !important;
+  min-width: 140px;
+  padding: 12px 20px !important;
+}
+.apply-modal-content .form-grid-2 {
+  margin-top: 4px;
+}
+body.modal-open {
+  overflow: hidden !important;
+}
+@keyframes applyModalIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@media (max-width: 640px) {
+  .apply-modal-content {
+    padding: 22px 16px 18px !important;
+  }
+  .apply-modal-actions {
+    flex-direction: column-reverse;
+  }
+  .apply-modal-actions .btn {
+    width: 100% !important;
+  }
+}

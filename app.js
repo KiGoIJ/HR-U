@@ -570,7 +570,7 @@ function renderHome() {
   $$("#vacancyList [data-pos]").forEach((el) => {
     const go = () => {
       state.selectedPosId = el.getAttribute("data-pos");
-      $("#applyCard").style.display = "none";
+      closeApplyModal();
       renderHome();
     };
     el.addEventListener("click", go);
@@ -615,14 +615,44 @@ function renderHome() {
       ${already ? `<button type="button" class="btn btn--secondary" id="btnGoMy">Мои заявки</button>` : ""}
     </div>
   `;
-  $("#btnStartApply")?.addEventListener("click", () => {
-    $("#applyPosId").value = p.id;
-    $("#applyPosTitle").textContent = p.title;
-    $("#aName").value = state.user.fullName || "";
-    $("#applyCard").style.display = "";
-    $("#applyCard").scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+  $("#btnStartApply")?.addEventListener("click", () => openApplyModal(p));
   $("#btnGoMy")?.addEventListener("click", () => show("my"));
+}
+
+function openApplyModal(p) {
+  if (!p) return;
+  const modal = $("#applyModal");
+  if (!modal) return;
+  $("#applyPosId").value = p.id;
+  $("#applyPosTitle").textContent = p.title;
+  const meta = $("#applyPosMeta");
+  if (meta) {
+    meta.innerHTML = `<i class="fas fa-building"></i> ${esc(p.department || "—")} · мест: ${esc(
+      p.slots || 1
+    )}`;
+  }
+  $("#aName").value = state.user?.fullName || "";
+  modal.style.display = "flex";
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  // focus first empty required field
+  setTimeout(() => {
+    const name = $("#aName");
+    if (name && !name.value) name.focus();
+    else $("#aStatic")?.focus();
+  }, 50);
+}
+
+function closeApplyModal() {
+  const modal = $("#applyModal");
+  if (!modal) return;
+  modal.style.display = "none";
+  modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+  const form = $("#applyForm");
+  if (form) form.reset();
+  const id = $("#applyPosId");
+  if (id) id.value = "";
 }
 
 function statusSteps(st) {
@@ -1130,10 +1160,19 @@ function bindUi() {
     renderReview();
   });
 
-  $("#applyCancel").onclick = () => {
-    $("#applyCard").style.display = "none";
-    $("#applyForm").reset();
-  };
+  const closeApply = () => closeApplyModal();
+  $("#applyCancel").onclick = closeApply;
+  $("#applyClose").onclick = closeApply;
+  $("#applyModal")?.addEventListener("click", (e) => {
+    // клик по затемнению (не по карточке) — закрыть
+    if (e.target === $("#applyModal")) closeApplyModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("#applyModal")?.style.display === "flex") {
+      closeApplyModal();
+    }
+  });
+
   $("#applyForm").onsubmit = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('[type="submit"]');
@@ -1152,8 +1191,7 @@ function bindUi() {
         extra: $("#aExtra").value,
       });
       toast("Заявка подана", "ok");
-      e.target.reset();
-      $("#applyCard").style.display = "none";
+      closeApplyModal();
       show("my");
     } catch (err) {
       toast(err.message || "Ошибка", "err");

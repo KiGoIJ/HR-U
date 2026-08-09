@@ -81,6 +81,58 @@
     </div>
   </div>
 
+  <!-- APPLY MODAL (foreground) -->
+  <div id="applyModal" class="modal apply-modal" style="display:none;" aria-hidden="true">
+    <div class="modal-content apply-modal-content" role="dialog" aria-modal="true" aria-labelledby="applyModalTitle">
+      <span class="modal-close" id="applyClose" title="Закрыть">&times;</span>
+      <h3 id="applyModalTitle"><i class="fas fa-file-signature"></i> Заявка · <span id="applyPosTitle">—</span></h3>
+      <div class="apply-modal-sub" id="applyPosMeta"></div>
+      <form id="applyForm" class="form-grid-2">
+        <input type="hidden" id="applyPosId" />
+        <div class="form-group">
+          <label>ФИО персонажа <span class="req">*</span></label>
+          <input id="aName" required maxlength="80" />
+        </div>
+        <div class="form-group">
+          <label>Static ID <span class="req">*</span></label>
+          <input id="aStatic" required maxlength="32" />
+        </div>
+        <div class="form-group">
+          <label>Discord <span class="req">*</span></label>
+          <input id="aDiscord" required maxlength="64" />
+        </div>
+        <div class="form-group">
+          <label>Возраст</label>
+          <input id="aAge" maxlength="8" />
+        </div>
+        <div class="form-group">
+          <label>Онлайн</label>
+          <input id="aOnline" maxlength="64" placeholder="МСК, вечера" />
+        </div>
+        <div class="form-group">
+          <label>Текущая должность</label>
+          <input id="aCurrent" maxlength="80" />
+        </div>
+        <div class="form-group full">
+          <label>Опыт <span class="req">*</span></label>
+          <textarea id="aExp" rows="4" required></textarea>
+        </div>
+        <div class="form-group full">
+          <label>Мотивация <span class="req">*</span></label>
+          <textarea id="aWhy" rows="3" required></textarea>
+        </div>
+        <div class="form-group full">
+          <label>Дополнительно</label>
+          <textarea id="aExtra" rows="2"></textarea>
+        </div>
+        <div class="form-group full apply-modal-actions">
+          <button type="button" class="btn btn--secondary" id="applyCancel">Отмена</button>
+          <button type="submit" class="btn btn--gold"><i class="fas fa-paper-plane"></i> Подать заявку</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- APP -->
   <div id="appContent" style="display:none;">
     <header class="header">
@@ -171,57 +223,6 @@
               </div>
               <div class="panel-b" id="posDetail">
                 <div class="empty-state"><i class="fas fa-hand-pointer"></i><h4>Выберите должность</h4></div>
-              </div>
-            </div>
-
-            <div class="panel mt-12" id="applyCard" style="display:none;margin-top:16px;">
-              <div class="panel-h">
-                <h2><i class="fas fa-pen"></i> Заявка · <span id="applyPosTitle">—</span></h2>
-              </div>
-              <div class="panel-b">
-                <form id="applyForm" class="form-grid-2">
-                  <input type="hidden" id="applyPosId" />
-                  <div class="form-group">
-                    <label>ФИО персонажа <span class="req">*</span></label>
-                    <input id="aName" required maxlength="80" />
-                  </div>
-                  <div class="form-group">
-                    <label>Static ID <span class="req">*</span></label>
-                    <input id="aStatic" required maxlength="32" />
-                  </div>
-                  <div class="form-group">
-                    <label>Discord <span class="req">*</span></label>
-                    <input id="aDiscord" required maxlength="64" />
-                  </div>
-                  <div class="form-group">
-                    <label>Возраст</label>
-                    <input id="aAge" maxlength="8" />
-                  </div>
-                  <div class="form-group">
-                    <label>Онлайн</label>
-                    <input id="aOnline" maxlength="64"  />
-                  </div>
-                  <div class="form-group">
-                    <label>Текущая должность</label>
-                    <input id="aCurrent" maxlength="80" />
-                  </div>
-                  <div class="form-group full">
-                    <label>Опыт <span class="req">*</span></label>
-                    <textarea id="aExp" rows="4" required></textarea>
-                  </div>
-                  <div class="form-group full">
-                    <label>Мотивация <span class="req">*</span></label>
-                    <textarea id="aWhy" rows="3" required></textarea>
-                  </div>
-                  <div class="form-group full">
-                    <label>Дополнительно</label>
-                    <textarea id="aExtra" rows="2"></textarea>
-                  </div>
-                  <div class="form-group full inline-actions">
-                    <button type="submit" class="btn btn--gold"><i class="fas fa-paper-plane"></i> Подать</button>
-                    <button type="button" class="btn btn--secondary" id="applyCancel">Отмена</button>
-                  </div>
-                </form>
               </div>
             </div>
           </div>
