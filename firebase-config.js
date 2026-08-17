@@ -15,7 +15,5 @@ export const firebaseConfig = {
 
 /**
  * SHA-256 хеш мастер-пароля для доступа кадровиков и администрации.
- * По умолчанию хеш для пароля "123456"
- * Для смены сгенерируйте SHA-256 от вашего нового мастер-пароля.
  */
-export const MASTER_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
+export const MASTER_HASH = "eea38f619cdb1d17ede5038b0e7109bda0305966aabf71309cf696853da0cc45";
