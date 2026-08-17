@@ -24,9 +24,9 @@ const R = {
   logs: db.ref("apps/logs"),
 };
 
-// SHA-256 hash of default master key "123456" with salt "asuls_master_salt"
+
 const DEFAULT_MASTER_SALT = "asuls_master_salt";
-const MASTER_HASH = "e4d3cbef726d197812b054da8320394d54d73e711f935d07953cc59452b21876";
+const MASTER_HASH = "eea38f619cdb1d17ede5038b0e7109bda0305966aabf71309cf696853da0cc45";
 
 const STATUS = {
   new: { label: "Подана", cls: "b-new", icon: "fa-inbox" },
