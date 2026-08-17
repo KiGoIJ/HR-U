@@ -42,17 +42,17 @@
       <form id="loginForm" class="login-form">
         <div class="form-group">
           <label for="loginName">ФИО</label>
-          <input id="loginName" required placeholder="Иванов И.И." autocomplete="username" />
+          <input id="loginName" required placeholder="Иванов И.И." autocomplete="username" maxlength="80" />
         </div>
         <div class="form-group">
           <label for="loginPass">Пароль</label>
-          <input id="loginPass" type="password" required autocomplete="current-password" />
+          <input id="loginPass" type="password" required autocomplete="current-password" maxlength="64" />
         </div>
         <div class="form-group" id="loginMasterGroup" style="display:none;">
-          <label for="loginMaster">Мастер-пароль</label>
-          <input id="loginMaster" type="password" maxlength="6" inputmode="numeric" autocomplete="off" />
+          <label for="loginMaster">Мастер-пароль (для персонала)</label>
+          <input id="loginMaster" type="password" maxlength="32" autocomplete="off" placeholder="Введите мастер-пароль" />
         </div>
-        <button class="btn btn--gold btn--full" type="submit"><i class="fas fa-sign-in-alt"></i> Войти</button>
+        <button class="btn btn--gold btn--full" type="submit" id="btnLoginSubmit"><i class="fas fa-sign-in-alt"></i> Войти</button>
         <div id="loginError" class="login-error" style="display:none;"></div>
       </form>
       <div style="margin-top:12px;">
@@ -65,17 +65,17 @@
   <div id="regModal" class="modal" style="display:none;">
     <div class="modal-content">
       <span class="modal-close" id="regClose">&times;</span>
-      <h3><i class="fas fa-user-plus"></i> Регистрация</h3>
+      <h3><i class="fas fa-user-plus"></i> Регистрация кандидата</h3>
       <form id="regForm">
         <div class="form-group">
-          <label>ФИО</label>
-          <input id="regName" required />
+          <label>ФИО <span class="req">*</span></label>
+          <input id="regName" required maxlength="80" placeholder="Иванов Иван Иванович" />
         </div>
         <div class="form-group">
-          <label>Пароль</label>
-          <input id="regPass" type="password" required minlength="4" />
+          <label>Пароль <span class="req">*</span></label>
+          <input id="regPass" type="password" required minlength="4" maxlength="64" placeholder="Минимум 4 символа" />
         </div>
-        <button type="submit" class="btn btn--gold"><i class="fas fa-check"></i> Создать</button>
+        <button type="submit" class="btn btn--gold"><i class="fas fa-check"></i> Создать аккаунт</button>
         <div id="regError" class="login-error" style="display:none;"></div>
       </form>
     </div>
@@ -91,39 +91,39 @@
         <input type="hidden" id="applyPosId" />
         <div class="form-group">
           <label>ФИО персонажа <span class="req">*</span></label>
-          <input id="aName" required maxlength="80" />
+          <input id="aName" required maxlength="80" placeholder="Имя Фамилия" />
         </div>
         <div class="form-group">
           <label>Static ID <span class="req">*</span></label>
-          <input id="aStatic" required maxlength="32" />
+          <input id="aStatic" required maxlength="32" placeholder="#12345" />
         </div>
         <div class="form-group">
           <label>Discord <span class="req">*</span></label>
-          <input id="aDiscord" required maxlength="64" />
+          <input id="aDiscord" required maxlength="64" placeholder="username или tag" />
         </div>
         <div class="form-group">
-          <label>Возраст</label>
-          <input id="aAge" maxlength="8" />
+          <label>Возраст (IC/OOC)</label>
+          <input id="aAge" maxlength="16" placeholder="25 / 18" />
         </div>
         <div class="form-group">
-          <label>Онлайн</label>
-          <input id="aOnline" maxlength="64" />
+          <label>Онлайн (ч/сутки)</label>
+          <input id="aOnline" maxlength="32" placeholder="4-6 часов" />
         </div>
         <div class="form-group">
-          <label>Текущая должность</label>
-          <input id="aCurrent" maxlength="80" />
+          <label>Текущая должность / фракция</label>
+          <input id="aCurrent" maxlength="80" placeholder="Младший агент" />
         </div>
         <div class="form-group full">
-          <label>Опыт <span class="req">*</span></label>
-          <textarea id="aExp" rows="4" required></textarea>
+          <label>Опыт работы и достижения <span class="req">*</span></label>
+          <textarea id="aExp" rows="4" required maxlength="2000" placeholder="Опишите ваш опыт в силовых структурах и фракциях..."></textarea>
         </div>
         <div class="form-group full">
-          <label>Мотивация <span class="req">*</span></label>
-          <textarea id="aWhy" rows="3" required></textarea>
+          <label>Мотивация и цели <span class="req">*</span></label>
+          <textarea id="aWhy" rows="3" required maxlength="2000" placeholder="Почему именно вы должны занять эту должность?"></textarea>
         </div>
         <div class="form-group full">
-          <label>Дополнительно</label>
-          <textarea id="aExtra" rows="2"></textarea>
+          <label>Дополнительная информация</label>
+          <textarea id="aExtra" rows="2" maxlength="1000" placeholder="Ссылки на квенту, спецсвязь, рекомендации..."></textarea>
         </div>
         <div class="form-group full apply-modal-actions">
           <button type="button" class="btn btn--secondary" id="applyCancel">Отмена</button>
@@ -133,11 +133,11 @@
     </div>
   </div>
 
-  <!-- APP -->
+  <!-- APP CONTENT -->
   <div id="appContent" style="display:none;">
     <header class="header">
       <div class="container header__inner">
-        <div class="header__logo" id="goHome">
+        <div class="header__logo" id="goHome" style="cursor:pointer;">
           <i class="fas fa-shield-alt"></i>
           <span>АСУЛС · ЗАЯВКИ</span>
         </div>
@@ -149,7 +149,7 @@
           <button type="button" class="btn btn--gold" id="btnReview" style="display:none;"><i class="fas fa-clipboard-list"></i> <span class="hide-sm">Рассмотрение</span></button>
           <button type="button" class="btn btn--gold" id="btnAdmin" style="display:none;"><i class="fas fa-briefcase"></i> <span class="hide-sm">Должности</span></button>
           <button type="button" class="btn btn--gold" id="btnUsers" style="display:none;"><i class="fas fa-users-cog"></i> <span class="hide-sm">Пользователи</span></button>
-          <button type="button" class="btn btn--secondary" id="btnLogout"><i class="fas fa-sign-out-alt"></i></button>
+          <button type="button" class="btn btn--secondary" id="btnLogout" title="Выйти из системы"><i class="fas fa-sign-out-alt"></i></button>
         </div>
       </div>
     </header>
@@ -268,6 +268,7 @@
             <option value="interview">Собеседование</option>
             <option value="accepted">Приняты</option>
             <option value="rejected">Отказ</option>
+            <option value="withdrawn">Отозваны</option>
           </select>
           <button type="button" class="btn btn--secondary" data-back-home><i class="fas fa-arrow-left"></i></button>
         </div>
@@ -315,19 +316,19 @@
                 </div>
                 <div class="form-group">
                   <label>Мест</label>
-                  <input id="posSlots" type="number" min="1" value="1" />
+                  <input id="posSlots" type="number" min="1" max="999" value="1" />
                 </div>
                 <div class="form-group full">
                   <label>Кратко</label>
-                  <textarea id="posSummary" rows="2"></textarea>
+                  <textarea id="posSummary" rows="2" maxlength="500"></textarea>
                 </div>
                 <div class="form-group full">
                   <label>Требования</label>
-                  <textarea id="posReq" rows="4" placeholder="Каждое с новой строки"></textarea>
+                  <textarea id="posReq" rows="4" placeholder="Каждое с новой строки" maxlength="2000"></textarea>
                 </div>
                 <div class="form-group full">
                   <label>Обязанности</label>
-                  <textarea id="posDuties" rows="4" placeholder="Каждое с новой строки"></textarea>
+                  <textarea id="posDuties" rows="4" placeholder="Каждое с новой строки" maxlength="2000"></textarea>
                 </div>
                 <div class="form-group full inline-actions">
                   <button type="submit" class="btn btn--gold"><i class="fas fa-save"></i> Сохранить</button>
@@ -359,14 +360,14 @@
             <div class="panel-h"><h2 id="userFormTitle"><i class="fas fa-user-plus"></i> Новый пользователь</h2></div>
             <div class="panel-b">
               <form id="userForm" class="form-grid-2">
-                <input type="hidden" id="userIndex" value="" />
+                <input type="hidden" id="userId" value="" />
                 <div class="form-group full">
                   <label>ФИО <span class="req">*</span></label>
-                  <input id="userName" required maxlength="80" />
+                  <input id="userName" required maxlength="80" placeholder="Иванов И.И." />
                 </div>
                 <div class="form-group">
                   <label>Пароль</label>
-                  <input id="userPass" type="text" maxlength="64" autocomplete="new-password" />
+                  <input id="userPass" type="password" maxlength="64" autocomplete="new-password" placeholder="Пароль" />
                 </div>
                 <div class="form-group">
                   <label>Роль</label>

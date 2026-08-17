@@ -1,8 +1,35 @@
 {
   "rules": {
     "apps": {
-      ".read": true,
-      ".write": true
+      ".read": "auth != null",
+      "positions": {
+        ".read": true,
+        ".write": "auth != null",
+        "$posId": {
+          ".validate": "newData.hasChildren(['title', 'status']) && (newData.child('status').val() === 'open' || newData.child('status').val() === 'closed')"
+        }
+      },
+      "applications": {
+        ".read": "auth != null",
+        "$appId": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['id', 'positionId', 'name', 'staticId', 'discord', 'status']) && (newData.child('status').val() === 'new' || newData.child('status').val() === 'review' || newData.child('status').val() === 'interview' || newData.child('status').val() === 'accepted' || newData.child('status').val() === 'rejected' || newData.child('status').val() === 'withdrawn')"
+        }
+      },
+      "users": {
+        ".read": "auth != null",
+        "$userId": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['fullName', 'role']) && (newData.child('role').val() === 'admin' || newData.child('role').val() === 'reviewer' || newData.child('role').val() === 'user')"
+        }
+      },
+      "logs": {
+        ".read": "auth != null",
+        "$logId": {
+          ".write": "auth != null && !data.exists() && newData.exists()",
+          ".validate": "newData.hasChildren(['id', 'kind', 'message', 'at'])"
+        }
+      }
     }
   }
 }

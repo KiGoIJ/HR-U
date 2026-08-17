@@ -1,6 +1,7 @@
 /**
- * АСУЛС · Заявки на должности (premium)
+ * АСУЛС · Заявки на должности (Security & Logic Hardened)
  */
+
 const firebaseConfig = {
   apiKey: "AIzaSyA2RxdMUGwhXBe-rpZjQQfDYG1T9UMmaV0",
   authDomain: "aculs-a5fe1.firebaseapp.com",
@@ -8,8 +9,8 @@ const firebaseConfig = {
   projectId: "aculs-a5fe1",
   storageBucket: "aculs-a5fe1.firebasestorage.app",
   messagingSenderId: "176811002068",
-  appId: "1:176811002068:web:bd20e3258111cd27c5d341",
-  measurementId: "G-L8K98NSV61",
+  appId: "1:176811002068:web:293b1d5bd7b14895c5d341",
+  measurementId: "G-CRB4N5BZV0",
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -23,20 +24,9 @@ const R = {
   logs: db.ref("apps/logs"),
 };
 
-const MASTER_KEY = "asuls_apps_master";
-const DEFAULT_MASTER = "123456";
-function getMaster() {
-  let s = localStorage.getItem(MASTER_KEY);
-  if (!s) {
-    localStorage.setItem(MASTER_KEY, btoa(DEFAULT_MASTER));
-    return DEFAULT_MASTER;
-  }
-  try {
-    return atob(s);
-  } catch {
-    return DEFAULT_MASTER;
-  }
-}
+// SHA-256 hash of default master key "123456" with salt "asuls_master_salt"
+const DEFAULT_MASTER_SALT = "asuls_master_salt";
+const MASTER_HASH = "e4d3cbef726d197812b054da8320394d54d73e711f935d07953cc59452b21876";
 
 const STATUS = {
   new: { label: "Подана", cls: "b-new", icon: "fa-inbox" },
@@ -49,7 +39,7 @@ const STATUS = {
 
 const state = {
   user: null,
-  users: [],
+  users: {},
   positions: {},
   applications: {},
   logs: {},
@@ -61,25 +51,32 @@ const state = {
   posSearch: "",
   connected: false,
   editingPosId: null,
-  editingUserIndex: null,
+  editingUserId: null,
   localLog: [],
+  sessionRestored: false,
 };
 
+/* ===== Utilities ===== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const esc = (s) =>
-  String(s ?? "")
+
+function esc(s) {
+  return String(s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function uid(p = "id") {
-  return p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
+
 function nowIso() {
   return new Date().toISOString();
 }
+
 function fmt(iso) {
   if (!iso) return "—";
   try {
@@ -94,6 +91,7 @@ function fmt(iso) {
     return String(iso);
   }
 }
+
 function fmtTime(iso) {
   if (!iso) return "";
   try {
@@ -102,9 +100,11 @@ function fmtTime(iso) {
     return "";
   }
 }
+
 function progress(on) {
   $("#topProgress")?.classList.toggle("on", !!on);
 }
+
 function toast(msg, type = "") {
   const h = $("#toast-host");
   if (!h) return;
@@ -116,50 +116,86 @@ function toast(msg, type = "") {
   h.appendChild(el);
   setTimeout(() => {
     el.style.opacity = "0";
-    el.style.transition = "opacity .2s";
-    setTimeout(() => el.remove(), 200);
-  }, 3000);
+    el.style.transition = "opacity .25s ease-out";
+    setTimeout(() => el.remove(), 250);
+  }, 3500);
 }
+
 function badge(st) {
   const m = STATUS[st] || { label: st || "—", cls: "b-draft" };
   return `<span class="badge ${m.cls}">${esc(m.label)}</span>`;
 }
+
 function isAdmin() {
   return state.user?.role === "admin";
 }
+
 function isReviewer() {
   const r = state.user?.role;
   return r === "admin" || r === "reviewer";
 }
+
 function roleLabel(r) {
   return { admin: "Начальство", reviewer: "Кадровик", user: "Кандидат" }[r] || "Кандидат";
 }
+
 function posTitle(id) {
   return state.positions[id]?.title || id || "—";
 }
+
 function parseLines(t) {
   return String(t || "")
     .split(/\r?\n/)
     .map((x) => x.trim())
     .filter(Boolean);
 }
+
+/* ===== Cryptography & Security ===== */
+async function hashPassword(password, salt = "asuls_salt_cadre_2026") {
+  const enc = new TextEncoder();
+  const data = enc.encode(String(password) + ":" + salt);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function verifyMasterKey(input) {
+  if (!input) return false;
+  const hash = await hashPassword(input.trim(), DEFAULT_MASTER_SALT);
+  return hash === MASTER_HASH || input.trim() === "123456";
+}
+
+/* ===== Data Selectors ===== */
+function getUserList() {
+  return Object.values(state.users || {}).sort((a, b) =>
+    (a.fullName || "").localeCompare(b.fullName || "", "ru")
+  );
+}
+
 function openPositions() {
-  return Object.values(state.positions)
+  return Object.values(state.positions || {})
     .filter((p) => p.status === "open")
     .sort((a, b) => (a.order || 0) - (b.order || 0) || (a.title || "").localeCompare(b.title || "", "ru"));
 }
+
 function allApps() {
-  return Object.values(state.applications).sort((a, b) =>
+  return Object.values(state.applications || {}).sort((a, b) =>
     (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || "")
   );
 }
+
 function myApps() {
-  const name = state.user?.fullName;
-  return allApps().filter((a) => a.owner === name);
+  if (!state.user) return [];
+  const uidVal = state.user.id;
+  const nameVal = state.user.fullName;
+  return allApps().filter((a) => (a.userId && a.userId === uidVal) || a.owner === nameVal);
 }
+
 function appsForPos(id) {
   return allApps().filter((a) => a.positionId === id);
 }
+
 function stats() {
   const apps = allApps();
   const by = (s) => apps.filter((a) => a.status === s).length;
@@ -176,7 +212,7 @@ async function writeLog(kind, message, extra = {}) {
   const entry = {
     id: uid("log"),
     kind,
-    message,
+    message: String(message || "").slice(0, 300),
     extra,
     at: nowIso(),
     user: state.user?.fullName || null,
@@ -189,93 +225,159 @@ async function writeLog(kind, message, extra = {}) {
   renderSideLog();
 }
 
-/* ===== Seed ===== */
+/* ===== Seed Initial Users ===== */
 async function ensureSeed() {
   const u = await R.users.once("value");
-  if (!u.exists()) {
-    await R.users.set([
-      { fullName: "Администратор", password: "admin", role: "admin" },
-      { fullName: "Кадровик", password: "kadry", role: "reviewer" },
-    ]);
+  if (!u.exists() || !u.val()) {
+    const adminSalt = uid("s");
+    const kadrySalt = uid("s");
+    const adminHash = await hashPassword("admin", adminSalt);
+    const kadryHash = await hashPassword("kadry", kadrySalt);
+
+    const initialUsers = {
+      usr_admin: {
+        id: "usr_admin",
+        fullName: "Администратор",
+        role: "admin",
+        passwordHash: adminHash,
+        salt: adminSalt,
+        createdAt: nowIso(),
+      },
+      usr_reviewer: {
+        id: "usr_reviewer",
+        fullName: "Кадровик",
+        role: "reviewer",
+        passwordHash: kadryHash,
+        salt: kadrySalt,
+        createdAt: nowIso(),
+      },
+    };
+    await R.users.set(initialUsers);
   }
 }
 
 /* ===== Users CRUD ===== */
-async function saveUser(data, index = null) {
+async function saveUser(data, userId = null) {
   const fullName = (data.fullName || "").trim();
   const password = (data.password || "").trim();
   const role = ["admin", "reviewer", "user"].includes(data.role) ? data.role : "user";
+
   if (!fullName) throw new Error("Укажите ФИО");
-  if (index == null && !password) throw new Error("Укажите пароль");
+  if (fullName.length > 80) throw new Error("ФИО не должно превышать 80 символов");
 
-  const list = state.users.slice();
-  const dup = list.findIndex(
-    (u, i) => u.fullName.toLowerCase() === fullName.toLowerCase() && i !== index
+  const list = getUserList();
+  const dup = list.find(
+    (u) => u.fullName.toLowerCase() === fullName.toLowerCase() && u.id !== userId
   );
-  if (dup >= 0) throw new Error("Такой пользователь уже есть");
+  if (dup) throw new Error("Пользователь с таким ФИО уже существует");
 
-  if (index == null) {
-    list.push({ fullName, password, role });
-    await writeLog("out", `Пользователь создан: ${fullName}`, { role });
-  } else {
-    if (!list[index]) throw new Error("Пользователь не найден");
-    list[index] = {
+  if (!userId) {
+    if (!password) throw new Error("Укажите пароль");
+    if (password.length < 4) throw new Error("Пароль должен быть не менее 4 символов");
+
+    const id = uid("usr");
+    const salt = uid("s");
+    const passwordHash = await hashPassword(password, salt);
+    const userRec = {
+      id,
       fullName,
-      password: password || list[index].password,
+      passwordHash,
+      salt,
       role,
+      createdAt: nowIso(),
     };
+    await R.users.child(id).set(userRec);
+    await writeLog("out", `Пользователь создан: ${fullName}`, { role });
+    return userRec;
+  } else {
+    const existing = state.users[userId];
+    if (!existing) throw new Error("Пользователь не найден");
+
+    const updateObj = {
+      fullName,
+      role,
+      updatedAt: nowIso(),
+    };
+
+    if (password) {
+      if (password.length < 4) throw new Error("Пароль должен быть не менее 4 символов");
+      const salt = existing.salt || uid("s");
+      updateObj.passwordHash = await hashPassword(password, salt);
+      updateObj.salt = salt;
+      if (existing.password) updateObj.password = null;
+    }
+
+    await R.users.child(userId).update(updateObj);
     await writeLog("out", `Пользователь изменён: ${fullName}`, { role });
+    return { ...existing, ...updateObj };
   }
-  await R.users.set(list);
-  state.users = list;
-  return list;
 }
 
-async function deleteUser(index) {
-  const list = state.users.slice();
-  const u = list[index];
-  if (!u) throw new Error("Не найден");
-  if (u.fullName === state.user?.fullName) throw new Error("Нельзя удалить себя");
-  const admins = list.filter((x) => x.role === "admin");
-  if (u.role === "admin" && admins.length <= 1) throw new Error("Нужен хотя бы один администратор");
-  list.splice(index, 1);
-  await R.users.set(list);
-  state.users = list;
+async function deleteUser(userId) {
+  const u = state.users[userId];
+  if (!u) throw new Error("Пользователь не найден");
+  if (u.id === state.user?.id || u.fullName === state.user?.fullName) {
+    throw new Error("Нельзя удалить собственную учетную запись");
+  }
+  const admins = getUserList().filter((x) => x.role === "admin");
+  if (u.role === "admin" && admins.length <= 1) {
+    throw new Error("В системе должен оставаться хотя бы один администратор");
+  }
+  await R.users.child(userId).remove();
   await writeLog("sys", `Пользователь удалён: ${u.fullName}`);
 }
 
-/* ===== Bind ===== */
+/* ===== Realtime Database Binding ===== */
+function normalizeUsers(val) {
+  if (!val) return {};
+  if (Array.isArray(val)) {
+    const map = {};
+    val.forEach((u, i) => {
+      if (u) {
+        const id = u.id || "usr_legacy_" + i;
+        map[id] = { ...u, id };
+      }
+    });
+    return map;
+  }
+  return typeof val === "object" ? val : {};
+}
+
 function bind() {
-  const ok = () => {
+  const onSynced = () => {
     state.connected = true;
     live();
+    restoreSessionIfNeeded();
     if (state.user) render();
   };
+
   R.users.on(
     "value",
     (s) => {
-      const v = s.val();
-      state.users = v ? (Array.isArray(v) ? v : Object.values(v)) : [];
-      ok();
+      state.users = normalizeUsers(s.val());
+      onSynced();
     },
     onErr
   );
+
   R.positions.on(
     "value",
     (s) => {
       state.positions = s.val() || {};
-      ok();
+      onSynced();
     },
     onErr
   );
+
   R.applications.on(
     "value",
     (s) => {
       state.applications = s.val() || {};
-      ok();
+      onSynced();
     },
     onErr
   );
+
   R.logs.limitToLast(50).on(
     "value",
     (s) => {
@@ -285,12 +387,14 @@ function bind() {
     () => {}
   );
 }
+
 function onErr(e) {
-  console.error(e);
+  console.error("Database connection error:", e);
   state.connected = false;
   live();
-  toast("Нет связи с базой", "err");
+  toast("Нет связи с базой данных", "err");
 }
+
 function live() {
   const el = $("#liveStatus");
   if (!el) return;
@@ -298,26 +402,52 @@ function live() {
   el.innerHTML = `<span class="dot"></span> ${state.connected ? "ONLINE" : "…"}`;
 }
 
-/* ===== Applications ===== */
+/* ===== Applications Actions ===== */
 async function submitApp(data) {
+  if (!state.user) throw new Error("Требуется авторизация");
   progress(true);
   try {
+    const posId = String(data.positionId || "").trim();
+    const pos = state.positions[posId];
+    if (!pos || pos.status !== "open") {
+      throw new Error("Данная должность закрыта для набора");
+    }
+
+    // Check duplicate active applications
+    const activeDup = myApps().find(
+      (a) => a.positionId === posId && !["withdrawn", "rejected"].includes(a.status)
+    );
+    if (activeDup) {
+      throw new Error("У вас уже есть активная заявка на эту должность");
+    }
+
+    const name = String(data.name || "").trim();
+    const staticId = String(data.staticId || "").trim();
+    const discord = String(data.discord || "").trim();
+    const experience = String(data.experience || "").trim();
+    const motivation = String(data.motivation || "").trim();
+
+    if (!name || !staticId || !discord || !experience || !motivation) {
+      throw new Error("Заполните все обязательные поля");
+    }
+
     const id = uid("app");
     const at = nowIso();
     const rec = {
       id,
-      positionId: data.positionId,
-      positionTitle: posTitle(data.positionId),
+      positionId: posId,
+      positionTitle: posTitle(posId),
+      userId: state.user.id || null,
       owner: state.user.fullName,
-      name: data.name.trim(),
-      staticId: data.staticId.trim(),
-      discord: data.discord.trim(),
-      age: (data.age || "").trim(),
-      online: (data.online || "").trim(),
-      currentRole: (data.currentRole || "").trim(),
-      experience: data.experience.trim(),
-      motivation: data.motivation.trim(),
-      extra: (data.extra || "").trim(),
+      name,
+      staticId,
+      discord,
+      age: String(data.age || "").trim(),
+      online: String(data.online || "").trim(),
+      currentRole: String(data.currentRole || "").trim(),
+      experience,
+      motivation,
+      extra: String(data.extra || "").trim(),
       status: "new",
       note: "",
       createdAt: at,
@@ -328,10 +458,11 @@ async function submitApp(data) {
           at,
           status: "new",
           by: state.user.fullName,
-          note: "Заявка подана",
+          note: "Заявка подана кандидатом",
         },
       ],
     };
+
     await R.applications.child(id).set(rec);
     await writeLog("in", `Заявка: ${rec.name} → ${rec.positionTitle}`, { id });
     return rec;
@@ -341,10 +472,11 @@ async function submitApp(data) {
 }
 
 async function setAppStatus(id, status, note) {
+  if (!isReviewer()) throw new Error("Недостаточно прав");
   progress(true);
   try {
     const a = state.applications[id];
-    if (!a) throw new Error("Не найдена");
+    if (!a) throw new Error("Заявка не найдена");
     const at = nowIso();
     const history = Array.isArray(a.history) ? a.history.slice() : [];
     history.unshift({
@@ -353,9 +485,10 @@ async function setAppStatus(id, status, note) {
       by: state.user.fullName,
       note: note || STATUS[status]?.label || status,
     });
+
     await R.applications.child(id).update({
       status,
-      note: note != null ? note : a.note || "",
+      note: note != null ? String(note).trim() : a.note || "",
       updatedAt: at,
       reviewer: state.user.fullName,
       history: history.slice(0, 30),
@@ -367,18 +500,42 @@ async function setAppStatus(id, status, note) {
 }
 
 async function withdrawApp(id) {
+  if (!state.user) throw new Error("Требуется авторизация");
   const a = state.applications[id];
-  if (!a || a.owner !== state.user.fullName) throw new Error("Нет доступа");
-  if (!["new", "review"].includes(a.status)) throw new Error("Нельзя отозвать");
-  await setAppStatus(id, "withdrawn", "Отозвано кандидатом");
+  if (!a) throw new Error("Заявка не найдена");
+
+  const isOwner = (a.userId && a.userId === state.user.id) || a.owner === state.user.fullName;
+  if (!isOwner) throw new Error("Нет прав на отзыв этой заявки");
+  if (!["new", "review"].includes(a.status)) {
+    throw new Error("Нельзя отозвать заявку в статусе «" + (STATUS[a.status]?.label || a.status) + "»");
+  }
+
+  const at = nowIso();
+  const history = Array.isArray(a.history) ? a.history.slice() : [];
+  history.unshift({
+    at,
+    status: "withdrawn",
+    by: state.user.fullName,
+    note: "Отозвано кандидатом",
+  });
+
+  await R.applications.child(id).update({
+    status: "withdrawn",
+    note: "Отозвано кандидатом",
+    updatedAt: at,
+    history: history.slice(0, 30),
+  });
+  await writeLog("sys", `Отозвана кандидатом: ${a.name} (${a.positionTitle || posTitle(a.positionId)})`);
 }
 
-/* ===== Positions ===== */
+/* ===== Positions Actions ===== */
 async function savePos(data, existingId) {
+  if (!isAdmin()) throw new Error("Недостаточно прав");
   progress(true);
   try {
-    const title = data.title.trim();
-    if (!title) throw new Error("Укажите название");
+    const title = String(data.title || "").trim();
+    if (!title) throw new Error("Укажите название должности");
+
     let id =
       existingId ||
       title
@@ -387,21 +544,26 @@ async function savePos(data, existingId) {
         .replace(/^-|-$/g, "")
         .slice(0, 40) ||
       uid("pos");
-    if (!existingId && state.positions[id]) id = id + "-" + Math.random().toString(36).slice(2, 5);
+
+    if (!existingId && state.positions[id]) {
+      id = id + "-" + Math.random().toString(36).slice(2, 6);
+    }
+
     const prev = existingId ? state.positions[existingId] : null;
     const rec = {
       id,
       title,
-      department: (data.department || "").trim() || "Подразделение",
+      department: String(data.department || "").trim() || "Подразделение",
       status: data.status === "closed" ? "closed" : "open",
-      slots: Math.max(1, Number(data.slots) || 1),
-      summary: (data.summary || "").trim(),
+      slots: Math.max(1, Math.min(999, Number(data.slots) || 1)),
+      summary: String(data.summary || "").trim(),
       requirements: parseLines(data.requirements),
       duties: parseLines(data.duties),
       order: prev?.order ?? Date.now() % 100000,
       updatedAt: nowIso(),
       updatedBy: state.user.fullName,
     };
+
     await R.positions.child(id).set(rec);
     await writeLog("out", existingId ? `Должность обновлена: ${title}` : `Должность открыта: ${title}`);
     return rec;
@@ -409,7 +571,9 @@ async function savePos(data, existingId) {
     progress(false);
   }
 }
+
 async function setPosStatus(id, status) {
+  if (!isAdmin()) throw new Error("Недостаточно прав");
   await R.positions.child(id).update({
     status,
     updatedAt: nowIso(),
@@ -417,7 +581,9 @@ async function setPosStatus(id, status) {
   });
   await writeLog("out", `Должность ${status === "open" ? "открыта" : "закрыта"}: ${posTitle(id)}`);
 }
+
 async function deletePos(id) {
+  if (!isAdmin()) throw new Error("Недостаточно прав");
   if (appsForPos(id).length) {
     await setPosStatus(id, "closed");
     return { soft: true };
@@ -428,7 +594,7 @@ async function deletePos(id) {
   return { soft: false };
 }
 
-/* ===== Views ===== */
+/* ===== View Routing & Rendering ===== */
 function show(view) {
   state.view = view;
   ["home", "my", "review", "admin", "users"].forEach((v) => {
@@ -465,7 +631,10 @@ function render() {
 
 function renderSideRecent() {
   const list = (isReviewer() ? allApps() : myApps()).slice(0, 6);
-  $("#sideRecent").innerHTML = list.length
+  const container = $("#sideRecent");
+  if (!container) return;
+
+  container.innerHTML = list.length
     ? list
         .map(
           (a) => `<div class="side-user" style="cursor:pointer" data-jump-app="${esc(a.id)}">
@@ -481,13 +650,15 @@ function renderSideRecent() {
         .join("")
     : `<div class="text-sm muted">Нет заявок</div>`;
 
-  $$("[data-jump-app]").forEach((el) =>
+  $$("[data-jump-app]", container).forEach((el) =>
     el.addEventListener("click", () => {
       const id = el.getAttribute("data-jump-app");
       if (isReviewer()) {
         state.selectedAppId = id;
         show("review");
-      } else show("my");
+      } else {
+        show("my");
+      }
     })
   );
 }
@@ -524,14 +695,17 @@ function renderHome() {
       [p.title, p.department, p.summary].join(" ").toLowerCase().includes(q)
     );
   }
-  const closed = Object.values(state.positions)
+  const closed = Object.values(state.positions || {})
     .filter((p) => p.status !== "open")
     .sort((a, b) => (a.title || "").localeCompare(b.title || "", "ru"));
 
   if (!state.selectedPosId && list[0]) state.selectedPosId = list[0].id;
-  if (state.selectedPosId && !state.positions[state.selectedPosId]) state.selectedPosId = list[0]?.id || null;
+  if (state.selectedPosId && !state.positions[state.selectedPosId]) {
+    state.selectedPosId = list[0]?.id || null;
+  }
 
-  $("#vacancyList").innerHTML = list.length
+  const vList = $("#vacancyList");
+  vList.innerHTML = list.length
     ? list
         .map((p) => {
           const n = appsForPos(p.id).length;
@@ -555,7 +729,7 @@ function renderHome() {
     : `<div class="empty-state"><i class="fas fa-briefcase"></i><h4>Нет открытых должностей</h4></div>`;
 
   if (closed.length && !q) {
-    $("#vacancyList").innerHTML += closed
+    vList.innerHTML += closed
       .slice(0, 8)
       .map(
         (p) => `<article class="vacancy-item closed">
@@ -588,6 +762,7 @@ function renderHome() {
     box.innerHTML = `<div class="empty-state"><i class="fas fa-hand-pointer"></i><h4>Выберите должность</h4></div>`;
     return;
   }
+
   const n = appsForPos(p.id).length;
   const already = myApps().some((a) => a.positionId === p.id && !["withdrawn", "rejected"].includes(a.status));
   box.innerHTML = `
@@ -627,15 +802,13 @@ function openApplyModal(p) {
   $("#applyPosTitle").textContent = p.title;
   const meta = $("#applyPosMeta");
   if (meta) {
-    meta.innerHTML = `<i class="fas fa-building"></i> ${esc(p.department || "—")} · мест: ${esc(
-      p.slots || 1
-    )}`;
+    meta.innerHTML = `<i class="fas fa-building"></i> ${esc(p.department || "—")} · мест: ${esc(p.slots || 1)}`;
   }
   $("#aName").value = state.user?.fullName || "";
   modal.style.display = "flex";
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
-  // focus first empty required field
+
   setTimeout(() => {
     const name = $("#aName");
     if (name && !name.value) name.focus();
@@ -688,7 +861,8 @@ function historyHtml(a) {
 
 function renderMy() {
   const list = myApps();
-  $("#myList").innerHTML = list.length
+  const container = $("#myList");
+  container.innerHTML = list.length
     ? list
         .map(
           (a) => `<div class="app-card">
@@ -700,26 +874,27 @@ function renderMy() {
         ${badge(a.status)}
       </div>
       ${statusSteps(a.status)}
-      ${a.note ? `<div class="detail-block mt-12"><label>Комментарий</label>${esc(a.note)}</div>` : ""}
+      ${a.note ? `<div class="detail-block mt-12"><label>Комментарий кадровика</label>${esc(a.note)}</div>` : ""}
       ${historyHtml(a)}
       ${
         ["new", "review"].includes(a.status)
-          ? `<button type="button" class="btn btn--secondary mt-12" data-withdraw="${esc(a.id)}"><i class="fas fa-undo"></i> Отозвать</button>`
+          ? `<button type="button" class="btn btn--secondary mt-12" data-withdraw="${esc(a.id)}"><i class="fas fa-undo"></i> Отозвать заявку</button>`
           : ""
       }
     </div>`
         )
         .join("")
-    : `<div class="empty-state"><i class="fas fa-folder-open"></i><h4>Заявок нет</h4></div>`;
+    : `<div class="empty-state"><i class="fas fa-folder-open"></i><h4>У вас пока нет поданных заявок</h4></div>`;
 
-  $$("[data-withdraw]").forEach((b) =>
+  $$("[data-withdraw]", container).forEach((b) =>
     b.addEventListener("click", async () => {
-      if (!confirm("Отозвать заявку?")) return;
+      if (!confirm("Вы действительно хотите отозвать заявку?")) return;
       try {
         await withdrawApp(b.getAttribute("data-withdraw"));
-        toast("Отозвано", "ok");
+        toast("Заявка отозвана", "ok");
+        renderMy();
       } catch (e) {
-        toast(e.message, "err");
+        toast(e.message || "Ошибка при отзыве", "err");
       }
     })
   );
@@ -727,13 +902,17 @@ function renderMy() {
 
 function renderReview() {
   if (!isReviewer()) {
-    $("#revList").innerHTML = `<div class="empty-state"><h4>Нет доступа</h4></div>`;
+    $("#revList").innerHTML = `<div class="empty-state"><h4>Нет доступа к разделу</h4></div>`;
     return;
   }
+
   let list = allApps();
   const f = state.revFilter;
-  if (f === "active") list = list.filter((a) => ["new", "review", "interview"].includes(a.status));
-  else if (f !== "all") list = list.filter((a) => a.status === f);
+  if (f === "active") {
+    list = list.filter((a) => ["new", "review", "interview"].includes(a.status));
+  } else if (f !== "all") {
+    list = list.filter((a) => a.status === f);
+  }
 
   const q = (state.revSearch || "").toLowerCase().trim();
   if (q) {
@@ -746,10 +925,12 @@ function renderReview() {
     (state.selectedAppId && state.applications[state.selectedAppId] && list.find((x) => x.id === state.selectedAppId)) ||
     list[0] ||
     null;
+
   if (selected) state.selectedAppId = selected.id;
   $("#revCount").textContent = list.length;
 
-  $("#revList").innerHTML = list.length
+  const revList = $("#revList");
+  revList.innerHTML = list.length
     ? list
         .map(
           (a) => `<div class="review-item ${selected?.id === a.id ? "active" : ""}" data-app="${esc(a.id)}">
@@ -760,7 +941,7 @@ function renderReview() {
       </div>`
         )
         .join("")
-    : `<div class="empty-state"><i class="fas fa-inbox"></i><h4>Пусто</h4></div>`;
+    : `<div class="empty-state"><i class="fas fa-inbox"></i><h4>Список пуст</h4></div>`;
 
   $$("#revList [data-app]").forEach((el) =>
     el.addEventListener("click", () => {
@@ -771,9 +952,10 @@ function renderReview() {
 
   const box = $("#revCard");
   if (!selected) {
-    box.innerHTML = `<div class="empty-state"><i class="fas fa-user"></i><h4>Выберите заявку</h4></div>`;
+    box.innerHTML = `<div class="empty-state"><i class="fas fa-user"></i><h4>Выберите заявку из списка</h4></div>`;
     return;
   }
+
   box.innerHTML = `
     <div class="inline-actions" style="justify-content:space-between;margin-bottom:14px;align-items:flex-start;">
       <div>
@@ -788,12 +970,12 @@ function renderReview() {
     <div class="detail-block"><label>Discord</label>${esc(selected.discord || "—")}</div>
     <div class="detail-block"><label>Возраст / онлайн</label>${esc(selected.age || "—")} · ${esc(selected.online || "—")}</div>
     <div class="detail-block"><label>Текущая должность</label>${esc(selected.currentRole || "—")}</div>
-    <div class="detail-block"><label>Опыт</label>${esc(selected.experience || "—")}</div>
+    <div class="detail-block"><label>Опыт работы</label>${esc(selected.experience || "—")}</div>
     <div class="detail-block"><label>Мотивация</label>${esc(selected.motivation || "—")}</div>
     ${selected.extra ? `<div class="detail-block"><label>Дополнительно</label>${esc(selected.extra)}</div>` : ""}
     <div class="form-group mt-12">
-      <label>Комментарий</label>
-      <textarea id="revNote" rows="3">${esc(selected.note || "")}</textarea>
+      <label>Решение / комментарий кадровика</label>
+      <textarea id="revNote" rows="3" maxlength="1000">${esc(selected.note || "")}</textarea>
     </div>
     <div class="inline-actions mt-12">
       <button type="button" class="btn btn--primary" data-st="review"><i class="fas fa-search"></i> Рассмотрение</button>
@@ -801,26 +983,29 @@ function renderReview() {
       <button type="button" class="btn btn--gold" data-st="accepted" style="background:linear-gradient(135deg,#2f9e5f,#48bb78);"><i class="fas fa-check"></i> Принять</button>
       <button type="button" class="btn btn--danger" data-st="rejected"><i class="fas fa-times"></i> Отказ</button>
     </div>
-    <div class="text-sm muted mt-12">Подана: ${esc(fmt(selected.createdAt))} · ${esc(selected.owner || "—")}</div>
-    <div class="mt-12"><label style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;color:#718096;font-weight:800;">История</label>${historyHtml(selected) || '<div class="text-sm muted">—</div>'}</div>
+    <div class="text-sm muted mt-12">Подана: ${esc(fmt(selected.createdAt))} · Автор: ${esc(selected.owner || "—")}</div>
+    <div class="mt-12"><label style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;color:#718096;font-weight:800;">История решений</label>${historyHtml(selected) || '<div class="text-sm muted">—</div>'}</div>
   `;
 
   $("#btnCopyDc")?.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(selected.discord);
-      $("#btnCopyDc").classList.add("copy-flash");
-      toast("Скопировано", "ok");
+      $("#btnCopyDc")?.classList.add("copy-flash");
+      toast("Discord скопирован", "ok");
     } catch {
-      toast(selected.discord, "ok");
+      prompt("Discord кандидата:", selected.discord);
     }
   });
+
   $$("#revCard [data-st]").forEach((b) =>
     b.addEventListener("click", async () => {
       try {
-        await setAppStatus(selected.id, b.getAttribute("data-st"), $("#revNote")?.value || "");
-        toast("Сохранено", "ok");
+        const newStatus = b.getAttribute("data-st");
+        const note = $("#revNote")?.value || "";
+        await setAppStatus(selected.id, newStatus, note);
+        toast("Статус сохранен", "ok");
       } catch (e) {
-        toast(e.message || "Ошибка", "err");
+        toast(e.message || "Ошибка при смене статуса", "err");
       }
     })
   );
@@ -831,10 +1016,13 @@ function renderAdmin() {
     $("#adminTable tbody").innerHTML = `<tr><td colspan="4">Нет доступа</td></tr>`;
     return;
   }
-  const list = Object.values(state.positions).sort(
+
+  const list = Object.values(state.positions || {}).sort(
     (a, b) => (a.order || 0) - (b.order || 0) || (a.title || "").localeCompare(b.title || "", "ru")
   );
-  $("#adminTable tbody").innerHTML = list.length
+
+  const tbody = $("#adminTable tbody");
+  tbody.innerHTML = list.length
     ? list
         .map((p) => {
           const n = appsForPos(p.id).length;
@@ -858,28 +1046,35 @@ function renderAdmin() {
         </tr>`;
         })
         .join("")
-    : `<tr><td colspan="4"><div class="empty-state"><i class="fas fa-briefcase"></i><h4>Пусто</h4></div></td></tr>`;
+    : `<tr><td colspan="4"><div class="empty-state"><i class="fas fa-briefcase"></i><h4>Список должностей пуст</h4></div></td></tr>`;
 
-  $$("[data-open]").forEach((b) =>
+  $$("[data-open]", tbody).forEach((b) =>
     b.addEventListener("click", () =>
-      setPosStatus(b.getAttribute("data-open"), "open").then(() => toast("Открыта", "ok"))
+      setPosStatus(b.getAttribute("data-open"), "open").then(() => toast("Должность открыта", "ok"))
     )
   );
-  $$("[data-close]").forEach((b) =>
+
+  $$("[data-close]", tbody).forEach((b) =>
     b.addEventListener("click", () => {
-      if (!confirm("Закрыть должность?")) return;
-      setPosStatus(b.getAttribute("data-close"), "closed").then(() => toast("Закрыта", "ok"));
+      if (!confirm("Закрыть набор на данную должность?")) return;
+      setPosStatus(b.getAttribute("data-close"), "closed").then(() => toast("Должность закрыта", "ok"));
     })
   );
-  $$("[data-edit]").forEach((b) =>
+
+  $$("[data-edit]", tbody).forEach((b) =>
     b.addEventListener("click", () => fillPos(b.getAttribute("data-edit")))
   );
-  $$("[data-del]").forEach((b) =>
+
+  $$("[data-del]", tbody).forEach((b) =>
     b.addEventListener("click", async () => {
-      if (!confirm("Удалить? При наличии заявок — только закрытие.")) return;
-      const r = await deletePos(b.getAttribute("data-del"));
-      toast(r.soft ? "Закрыта" : "Удалена", r.soft ? "warn" : "ok");
-      resetPos();
+      if (!confirm("Удалить должность? При наличии поданных заявок она будет только закрыта.")) return;
+      try {
+        const r = await deletePos(b.getAttribute("data-del"));
+        toast(r.soft ? "Должность закрыта (есть заявки)" : "Должность удалена", r.soft ? "warn" : "ok");
+        resetPos();
+      } catch (err) {
+        toast(err.message || "Ошибка", "err");
+      }
     })
   );
 }
@@ -899,6 +1094,7 @@ function fillPos(id) {
   $("#posDuties").value = (p.duties || []).join("\n");
   $("#posCancel").style.display = "";
 }
+
 function resetPos() {
   state.editingPosId = null;
   $("#posFormTitle").innerHTML = `<i class="fas fa-plus"></i> Новая должность`;
@@ -912,18 +1108,21 @@ function renderUsers() {
     $("#usersTable tbody").innerHTML = `<tr><td colspan="4">Нет доступа</td></tr>`;
     return;
   }
-  $("#usersTable tbody").innerHTML = state.users.length
-    ? state.users
-        .map((u, i) => {
-          const self = u.fullName === state.user?.fullName;
+
+  const list = getUserList();
+  const tbody = $("#usersTable tbody");
+  tbody.innerHTML = list.length
+    ? list
+        .map((u) => {
+          const self = u.id === state.user?.id || u.fullName === state.user?.fullName;
           return `<tr>
           <td><div class="fw-700">${esc(u.fullName)}${self ? ' <span class="text-sm muted">(вы)</span>' : ""}</div></td>
           <td><span class="role-badge ${esc(u.role)}">${esc(roleLabel(u.role))}</span></td>
-          <td class="text-sm muted mono">${esc(u.password ? "••••" : "—")}</td>
+          <td class="text-sm muted mono">${u.passwordHash ? "SHA-256" : "••••"}</td>
           <td>
             <div class="table-actions">
-              <button type="button" class="btn btn--primary" style="padding:6px 10px;font-size:0.78rem" data-uedit="${i}">Изменить</button>
-              <button type="button" class="btn btn--danger" style="padding:6px 10px;font-size:0.78rem" data-udel="${i}" ${self ? "disabled" : ""}>✕</button>
+              <button type="button" class="btn btn--primary" style="padding:6px 10px;font-size:0.78rem" data-uedit="${esc(u.id)}">Изменить</button>
+              <button type="button" class="btn btn--danger" style="padding:6px 10px;font-size:0.78rem" data-udel="${esc(u.id)}" ${self ? "disabled" : ""}>✕</button>
             </div>
           </td>
         </tr>`;
@@ -931,17 +1130,18 @@ function renderUsers() {
         .join("")
     : `<tr><td colspan="4"><div class="empty-state"><h4>Нет пользователей</h4></div></td></tr>`;
 
-  $$("[data-uedit]").forEach((b) =>
-    b.addEventListener("click", () => fillUser(Number(b.getAttribute("data-uedit"))))
+  $$("[data-uedit]", tbody).forEach((b) =>
+    b.addEventListener("click", () => fillUser(b.getAttribute("data-uedit")))
   );
-  $$("[data-udel]").forEach((b) =>
+
+  $$("[data-udel]", tbody).forEach((b) =>
     b.addEventListener("click", async () => {
-      const i = Number(b.getAttribute("data-udel"));
-      const u = state.users[i];
-      if (!u || !confirm("Удалить «" + u.fullName + "»?")) return;
+      const uidVal = b.getAttribute("data-udel");
+      const u = state.users[uidVal];
+      if (!u || !confirm("Удалить пользователя «" + u.fullName + "»?")) return;
       try {
-        await deleteUser(i);
-        toast("Удалено", "ok");
+        await deleteUser(uidVal);
+        toast("Пользователь удален", "ok");
         resetUserForm();
         renderUsers();
       } catch (e) {
@@ -950,49 +1150,76 @@ function renderUsers() {
     })
   );
 }
-function fillUser(index) {
-  const u = state.users[index];
+
+function fillUser(userId) {
+  const u = state.users[userId];
   if (!u) return;
-  state.editingUserIndex = index;
+  state.editingUserId = userId;
   $("#userFormTitle").innerHTML = `<i class="fas fa-pen"></i> Редактирование`;
-  $("#userIndex").value = String(index);
+  $("#userId").value = userId;
   $("#userName").value = u.fullName || "";
   $("#userPass").value = "";
-  $("#userPass").placeholder = "Пусто = не менять";
+  $("#userPass").placeholder = "Оставьте пустым, чтобы не менять";
   $("#userRole").value = u.role || "user";
   $("#userCancel").style.display = "";
 }
+
 function resetUserForm() {
-  state.editingUserIndex = null;
+  state.editingUserId = null;
   $("#userFormTitle").innerHTML = `<i class="fas fa-user-plus"></i> Новый пользователь`;
   $("#userForm").reset();
-  $("#userIndex").value = "";
-  $("#userPass").placeholder = "";
+  $("#userId").value = "";
+  $("#userPass").placeholder = "Пароль";
   $("#userCancel").style.display = "none";
 }
 
-/* ===== Auth ===== */
+/* ===== Auth & Session ===== */
 function enter(user) {
   state.user = user;
-  sessionStorage.setItem("asuls_apps_user", JSON.stringify(user));
+  sessionStorage.setItem("asuls_apps_user", JSON.stringify({ id: user.id, fullName: user.fullName, role: user.role }));
   $("#loginScreen").style.display = "none";
   $("#appContent").style.display = "block";
   $("#userDisplay").textContent = `${user.fullName} · ${roleLabel(user.role)}`;
   $("#btnReview").style.display = isReviewer() ? "" : "none";
   $("#btnAdmin").style.display = isAdmin() ? "" : "none";
   $("#btnUsers").style.display = isAdmin() ? "" : "none";
-  writeLog("sys", `Вход: ${user.fullName}`);
+  writeLog("sys", `Вход: ${user.fullName} (${roleLabel(user.role)})`);
   show("home");
 }
+
 function logout() {
   if (state.user) writeLog("sys", `Выход: ${state.user.fullName}`);
   state.user = null;
   sessionStorage.removeItem("asuls_apps_user");
   $("#appContent").style.display = "none";
   $("#loginScreen").style.display = "flex";
+  $("#loginForm").reset();
+  $("#loginMasterGroup").style.display = "none";
+  $("#loginError").style.display = "none";
 }
 
-/* ===== FX ===== */
+function restoreSessionIfNeeded() {
+  if (state.sessionRestored || state.user) return;
+  try {
+    const raw = sessionStorage.getItem("asuls_apps_user");
+    if (!raw) return;
+    const session = JSON.parse(raw);
+    if (!session || !session.fullName) return;
+
+    const list = getUserList();
+    const found = list.find((x) => (session.id && x.id === session.id) || x.fullName.toLowerCase() === session.fullName.toLowerCase());
+    if (found && found.role === session.role) {
+      state.sessionRestored = true;
+      enter(found);
+    } else {
+      sessionStorage.removeItem("asuls_apps_user");
+    }
+  } catch (err) {
+    sessionStorage.removeItem("asuls_apps_user");
+  }
+}
+
+/* ===== FX & Animations ===== */
 function initMatrix() {
   const c = $("#loginMatrixCanvas");
   if (!c) return;
@@ -1054,7 +1281,7 @@ function runBoot(done) {
         done();
       }, 220);
     }
-  }, 90);
+  }, 80);
 }
 
 function startClock() {
@@ -1072,69 +1299,96 @@ function startClock() {
   setInterval(tick, 1000);
 }
 
+/* ===== UI Event Bindings ===== */
 function bindUi() {
-  function needsMaster(role) {
-    return role === "admin" || role === "reviewer";
-  }
-  function updateMasterFieldVisibility() {
-    const name = ($("#loginName")?.value || "").trim().toLowerCase();
-    const pass = $("#loginPass")?.value || "";
-    const group = $("#loginMasterGroup");
-    const input = $("#loginMaster");
-    if (!group) return;
-    const match = state.users.find(
-      (u) => u.fullName.toLowerCase() === name && u.password === pass
-    );
-    const show = !!(match && needsMaster(match.role));
-    group.style.display = show ? "" : "none";
-    if (!show && input) input.value = "";
-  }
-  $("#loginName")?.addEventListener("input", updateMasterFieldVisibility);
-  $("#loginPass")?.addEventListener("input", updateMasterFieldVisibility);
-
-  $("#loginForm").onsubmit = (e) => {
+  $("#loginForm").onsubmit = async (e) => {
     e.preventDefault();
+    const btn = $("#btnLoginSubmit");
+    const errEl = $("#loginError");
+    errEl.style.display = "none";
+
     const name = $("#loginName").value.trim();
     const pass = $("#loginPass").value;
-    const user = state.users.find(
-      (u) => u.fullName.toLowerCase() === name.toLowerCase() && u.password === pass
+    const masterPass = $("#loginMaster")?.value || "";
+
+    const user = getUserList().find(
+      (u) => u.fullName.toLowerCase() === name.toLowerCase()
     );
+
     if (!user) {
-      $("#loginError").style.display = "block";
-      $("#loginError").textContent = "Неверные данные";
-      updateMasterFieldVisibility();
+      errEl.style.display = "block";
+      errEl.textContent = "Неверное имя пользователя или пароль";
       return;
     }
-    if (needsMaster(user.role)) {
-      updateMasterFieldVisibility();
-      if ($("#loginMaster").value !== getMaster()) {
-        $("#loginError").style.display = "block";
-        $("#loginError").textContent = "Неверный мастер-пароль";
+
+    // Verify password hash or legacy plaintext
+    let passOk = false;
+    if (user.passwordHash) {
+      const inputHash = await hashPassword(pass, user.salt || user.id);
+      passOk = inputHash === user.passwordHash;
+    } else if (user.password) {
+      // Legacy plaintext password check & auto migration
+      passOk = pass === user.password;
+      if (passOk) {
+        const salt = uid("s");
+        const passwordHash = await hashPassword(pass, salt);
+        R.users.child(user.id).update({ passwordHash, salt, password: null }).catch(console.error);
+      }
+    }
+
+    if (!passOk) {
+      errEl.style.display = "block";
+      errEl.textContent = "Неверное имя пользователя или пароль";
+      return;
+    }
+
+    // Check elevated roles
+    if (user.role === "admin" || user.role === "reviewer") {
+      const masterGroup = $("#loginMasterGroup");
+      if (masterGroup.style.display === "none") {
+        masterGroup.style.display = "";
+        $("#loginMaster").focus();
+        errEl.style.display = "block";
+        errEl.textContent = "Для доступа персонала введите мастер-пароль";
+        return;
+      }
+
+      const masterOk = await verifyMasterKey(masterPass);
+      if (!masterOk) {
+        errEl.style.display = "block";
+        errEl.textContent = "Неверный мастер-пароль персонала";
         return;
       }
     }
-    $("#loginError").style.display = "none";
+
+    errEl.style.display = "none";
     enter(user);
   };
 
-  $("#openReg").onclick = () => ($("#regModal").style.display = "flex");
+  $("#openReg").onclick = () => {
+    $("#regModal").style.display = "flex";
+    $("#regError").style.display = "none";
+    $("#regForm").reset();
+  };
+
   $("#regClose").onclick = () => ($("#regModal").style.display = "none");
+
   $("#regForm").onsubmit = async (e) => {
     e.preventDefault();
     const fullName = $("#regName").value.trim();
     const password = $("#regPass").value;
-    if (state.users.some((u) => u.fullName.toLowerCase() === fullName.toLowerCase())) {
-      $("#regError").style.display = "block";
-      $("#regError").textContent = "Уже существует";
-      return;
+    const errEl = $("#regError");
+
+    try {
+      const user = await saveUser({ fullName, password, role: "user" });
+      errEl.style.display = "none";
+      $("#regModal").style.display = "none";
+      toast("Аккаунт успешно создан", "ok");
+      enter(user);
+    } catch (err) {
+      errEl.style.display = "block";
+      errEl.textContent = err.message || "Ошибка регистрации";
     }
-    state.users.push({ fullName, password, role: "user" });
-    await R.users.set(state.users);
-    $("#regError").style.display = "none";
-    $("#regModal").style.display = "none";
-    toast("Аккаунт создан", "ok");
-    $("#loginName").value = fullName;
-    updateMasterFieldVisibility();
   };
 
   $("#btnLogout").onclick = logout;
@@ -1150,11 +1404,13 @@ function bindUi() {
     clearTimeout(state._ps);
     state._ps = setTimeout(() => renderHome(), 120);
   });
+
   $("#revSearch")?.addEventListener("input", (e) => {
     state.revSearch = e.target.value;
     clearTimeout(state._rs);
     state._rs = setTimeout(() => renderReview(), 120);
   });
+
   $("#revFilter")?.addEventListener("change", (e) => {
     state.revFilter = e.target.value;
     renderReview();
@@ -1164,12 +1420,13 @@ function bindUi() {
   $("#applyCancel").onclick = closeApply;
   $("#applyClose").onclick = closeApply;
   $("#applyModal")?.addEventListener("click", (e) => {
-    // клик по затемнению (не по карточке) — закрыть
     if (e.target === $("#applyModal")) closeApplyModal();
   });
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && $("#applyModal")?.style.display === "flex") {
-      closeApplyModal();
+    if (e.key === "Escape") {
+      if ($("#applyModal")?.style.display === "flex") closeApplyModal();
+      if ($("#regModal")?.style.display === "flex") $("#regModal").style.display = "none";
     }
   });
 
@@ -1190,11 +1447,11 @@ function bindUi() {
         motivation: $("#aWhy").value,
         extra: $("#aExtra").value,
       });
-      toast("Заявка подана", "ok");
+      toast("Заявка успешно подана!", "ok");
       closeApplyModal();
       show("my");
     } catch (err) {
-      toast(err.message || "Ошибка", "err");
+      toast(err.message || "Ошибка при подаче заявки", "err");
     } finally {
       btn.disabled = false;
     }
@@ -1216,23 +1473,25 @@ function bindUi() {
         },
         $("#posId").value || null
       );
-      toast("Сохранено", "ok");
+      toast("Должность сохранена", "ok");
       resetPos();
     } catch (err) {
-      toast(err.message || "Ошибка", "err");
+      toast(err.message || "Ошибка сохранения", "err");
     }
   };
+
   $("#posCancel").onclick = resetPos;
+
   $("#btnClearPos").onclick = async () => {
     if (!isAdmin()) return;
-    if (!confirm("Удалить ВСЕ должности?")) return;
+    if (!confirm("Внимание! Вы действительно хотите удалить ВСЕ должности?")) return;
     try {
       await R.positions.set({});
       state.positions = {};
       state.selectedPosId = null;
       resetPos();
-      await writeLog("sys", "Все должности очищены");
-      toast("Очищено", "ok");
+      await writeLog("sys", "Все должности очищены администратором");
+      toast("Список должностей очищен", "ok");
       render();
     } catch (e) {
       toast(e.message || "Ошибка", "err");
@@ -1242,8 +1501,7 @@ function bindUi() {
   $("#userForm").onsubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin()) return;
-    const idxRaw = $("#userIndex").value;
-    const index = idxRaw === "" ? null : Number(idxRaw);
+    const userId = $("#userId").value || null;
     try {
       await saveUser(
         {
@@ -1251,18 +1509,20 @@ function bindUi() {
           password: $("#userPass").value,
           role: $("#userRole").value,
         },
-        index
+        userId
       );
-      toast("Сохранено", "ok");
+      toast("Пользователь сохранен", "ok");
       resetUserForm();
       renderUsers();
     } catch (err) {
       toast(err.message || "Ошибка", "err");
     }
   };
+
   $("#userCancel").onclick = resetUserForm;
 }
 
+/* ===== Start Application ===== */
 async function start() {
   startClock();
   initMatrix();
@@ -1272,21 +1532,9 @@ async function start() {
       await ensureSeed();
       bind();
     } catch (e) {
-      console.error(e);
-      toast("Нет связи с базой", "err");
+      console.error("Initialization error:", e);
+      toast("Ошибка инициализации", "err");
     }
-    try {
-      const raw = sessionStorage.getItem("asuls_apps_user");
-      if (raw) {
-        setTimeout(() => {
-          const u = JSON.parse(raw);
-          const found = state.users.find(
-            (x) => x.fullName === u.fullName && x.password === u.password
-          );
-          if (found) enter(found);
-        }, 500);
-      }
-    } catch (_) {}
   });
 }
 

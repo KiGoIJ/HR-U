@@ -1,6 +1,6 @@
 /**
- * Firebase config — проект aculs-a5fe1
- * Замените значения, если пересоздадите веб-приложение в Firebase Console.
+ * Firebase Config & Security Configuration
+ * Вставьте параметры своего проекта из Firebase Console (Project Settings -> General -> Your apps -> Web app)
  */
 export const firebaseConfig = {
   apiKey: "AIzaSyA2RxdMUGwhXBe-rpZjQQfDYG1T9UMmaV0",
@@ -13,13 +13,9 @@ export const firebaseConfig = {
   measurementId: "G-CRB4N5BZV0",
 };
 
-/** Ключ ведущего обзвона (простая защита панели). Смените на свой. */
-export const HOST_KEY = "rp-host-2026";
-
 /**
- * Ключ начальства / админа:
- * — управление вакантными должностями (поставить / снять)
- * — база и логи IO
- * Смените на свой.
+ * SHA-256 хеш мастер-пароля для доступа кадровиков и администрации.
+ * По умолчанию хеш для пароля "123456"
+ * Для смены сгенерируйте SHA-256 от вашего нового мастер-пароля.
  */
-export const ADMIN_KEY = "rp-admin-2026";
+export const MASTER_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
